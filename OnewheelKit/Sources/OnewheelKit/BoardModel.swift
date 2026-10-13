@@ -4,12 +4,15 @@ public struct RideMode: Hashable, Sendable, Identifiable {
     public let name: String
     public let value: UInt16
     public let summary: String
+    /// Where this mode caps speed, in mph.
+    public let topSpeedMPH: Double
     public var id: UInt16 { value }
 
-    public init(name: String, value: UInt16, summary: String = "") {
+    public init(name: String, value: UInt16, summary: String = "", topSpeedMPH: Double = 20) {
         self.name = name
         self.value = value
         self.summary = summary
+        self.topSpeedMPH = topSpeedMPH
     }
 }
 
@@ -63,6 +66,27 @@ public enum BoardModel: String, Sendable {
         }
     }
 
+    /// Future Motion's published top speed in mph. Pushback starts near it.
+    public var topSpeedMPH: Double {
+        switch self {
+        case .v1: 15
+        case .pint: 16
+        case .pintX: 18
+        case .plus, .xr, .xrc: 19
+        case .gt: 20
+        case .gts: 25
+        case .unknown: 20
+        }
+    }
+
+    public var topSpeedKPH: Double { topSpeedMPH * 1.609344 }
+
+    /// Top speed in the given ride mode, falling back to the board's top speed.
+    /// Per-mode limits are from TrailWheel's table of Future Motion presets.
+    public func topSpeedMPH(mode: UInt16?) -> Double {
+        rideModes.first { $0.value == mode }?.topSpeedMPH ?? topSpeedMPH
+    }
+
     /// Amps per raw unit on `312`.
     public var currentScale: Double {
         switch self {
@@ -78,44 +102,46 @@ public enum BoardModel: String, Sendable {
         switch self {
         case .pint, .pintX:
             let x = self == .pintX ? " X" : ""
+            let top = topSpeedMPH
             return [
-                RideMode(name: "Redwood", value: 5, summary: "Gentle and forgiving, lowest top speed. Good for learning."),
-                RideMode(name: "Pacific\(x)", value: 6, summary: "The everyday mode: quicker and more responsive."),
-                RideMode(name: "Elevated\(x)", value: 7, summary: "Pacific with the nose tilted up, for grass and rough ground."),
-                RideMode(name: "Skyline\(x)", value: 8, summary: "The most aggressive and fastest mode."),
+                RideMode(name: "Redwood", value: 5, summary: "Gentle and forgiving, lowest top speed. Good for learning.", topSpeedMPH: 12),
+                RideMode(name: "Pacific\(x)", value: 6, summary: "The everyday mode: quicker and more responsive.", topSpeedMPH: top),
+                RideMode(name: "Elevated\(x)", value: 7, summary: "Pacific with the nose tilted up, for grass and rough ground.", topSpeedMPH: top),
+                RideMode(name: "Skyline\(x)", value: 8, summary: "The most aggressive and fastest mode.", topSpeedMPH: top),
             ]
         case .gt, .gts:
+            let top = topSpeedMPH
             return [
-                RideMode(name: "Bay", value: 3, summary: "Softest and slowest. Good for learning."),
-                RideMode(name: "Roam", value: 4, summary: "Relaxed cruising."),
-                RideMode(name: "Flow", value: 5, summary: "Balanced, the all-rounder."),
-                RideMode(name: "Highline", value: 6, summary: "Firm and quick."),
-                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails."),
-                RideMode(name: "Apex", value: 8, summary: "Most aggressive, highest top speed."),
+                RideMode(name: "Bay", value: 3, summary: "Softest and slowest. Good for learning.", topSpeedMPH: 12),
+                RideMode(name: "Roam", value: 4, summary: "Relaxed cruising.", topSpeedMPH: 18),
+                RideMode(name: "Flow", value: 5, summary: "Balanced, the all-rounder.", topSpeedMPH: top),
+                RideMode(name: "Highline", value: 6, summary: "Firm and quick.", topSpeedMPH: top),
+                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails.", topSpeedMPH: top),
+                RideMode(name: "Apex", value: 8, summary: "Most aggressive, highest top speed.", topSpeedMPH: top),
             ]
         case .xrc:
             return [
-                RideMode(name: "Sequoia", value: 3, summary: "Gentle and slow."),
-                RideMode(name: "Cruz", value: 4, summary: "Relaxed cruising."),
-                RideMode(name: "Mission", value: 5, summary: "Balanced, the all-rounder."),
-                RideMode(name: "Session", value: 6, summary: "Loose and playful."),
-                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails."),
-                RideMode(name: "Delirium", value: 8, summary: "Most aggressive, highest top speed."),
+                RideMode(name: "Sequoia", value: 3, summary: "Gentle and slow.", topSpeedMPH: 12),
+                RideMode(name: "Cruz", value: 4, summary: "Relaxed cruising.", topSpeedMPH: 15),
+                RideMode(name: "Mission", value: 5, summary: "Balanced, the all-rounder.", topSpeedMPH: 19),
+                RideMode(name: "Session", value: 6, summary: "Loose and playful.", topSpeedMPH: 19),
+                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails.", topSpeedMPH: 19),
+                RideMode(name: "Delirium", value: 8, summary: "Most aggressive, highest top speed.", topSpeedMPH: 19),
             ]
         case .plus, .xr:
             return [
-                RideMode(name: "Sequoia", value: 4, summary: "Gentle and slow."),
-                RideMode(name: "Cruz", value: 5, summary: "Relaxed cruising."),
-                RideMode(name: "Mission", value: 6, summary: "Balanced, the all-rounder."),
-                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails."),
-                RideMode(name: "Delirium", value: 8, summary: "Most aggressive, highest top speed."),
-                RideMode(name: "Custom", value: 9, summary: "Your own shaping, set in the official app."),
+                RideMode(name: "Sequoia", value: 4, summary: "Gentle and slow.", topSpeedMPH: 12),
+                RideMode(name: "Cruz", value: 5, summary: "Relaxed cruising.", topSpeedMPH: 15),
+                RideMode(name: "Mission", value: 6, summary: "Balanced, the all-rounder.", topSpeedMPH: 19),
+                RideMode(name: "Elevated", value: 7, summary: "Nose tilted up, for trails.", topSpeedMPH: 19),
+                RideMode(name: "Delirium", value: 8, summary: "Most aggressive, highest top speed.", topSpeedMPH: 19),
+                RideMode(name: "Custom", value: 9, summary: "Your own shaping, set in the official app.", topSpeedMPH: 19),
             ]
         case .v1:
             return [
-                RideMode(name: "Classic", value: 1, summary: "The original feel."),
-                RideMode(name: "Extreme", value: 2, summary: "Faster and stiffer."),
-                RideMode(name: "Elevated", value: 3, summary: "Nose tilted up."),
+                RideMode(name: "Classic", value: 1, summary: "The original feel.", topSpeedMPH: 12),
+                RideMode(name: "Extreme", value: 2, summary: "Faster and stiffer.", topSpeedMPH: 15),
+                RideMode(name: "Elevated", value: 3, summary: "Nose tilted up.", topSpeedMPH: 15),
             ]
         case .unknown:
             return []

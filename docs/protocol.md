@@ -140,11 +140,13 @@ Ride mode is the value of `302`. Values by board, from the official app's table 
 
 | Board | Modes |
 | --- | --- |
-| Pint, Pint X | Redwood 5, Pacific 6, Elevated 7, Skyline 8 (Pint X adds an "X" suffix) |
-| GT, GT-S | Bay 3, Roam 4, Flow 5, Highline 6, Elevated 7, Apex 8 |
+| Pint, Pint X | Redwood 5, Pacific 6, Elevated 7, Skyline 8 (Pint X adds an "X" suffix). Redwood caps at 12 mph, the rest at 16 (Pint) or 18 (Pint X) |
+| GT, GT-S | Bay 3, Roam 4, Flow 5, Highline 6, Elevated 7, Apex 8. Bay 12 mph, Roam 18, the rest 20 (GT) or 25 (GT-S) |
 | XR Classic | Sequoia 3, Cruz 4, Mission 5, Session 6, Elevated 7, Delirium 8 |
-| Plus, XR | Sequoia 4, Cruz 5, Mission 6, Elevated 7, Delirium 8, Custom 9 |
-| V1 | Classic 1, Extreme 2, Elevated 3 |
+| Plus, XR | Sequoia 4, Cruz 5, Mission 6, Elevated 7, Delirium 8, Custom 9. Sequoia 12 mph, Cruz 15, the rest 19 |
+| V1 | Classic 1, Extreme 2, Elevated 3. Classic 12 mph, the rest 15 |
+
+Per-mode speed limits are from TrailWheel's preset table (trailwheel.com/onewheel-riding-modes); XR Classic is assumed to match the XR.
 
 The board's nickname is not stored on the board. Renaming it in the official app writes nothing over BLE (the rename capture has no such write, and the app never touches `3fd`). The board still advertises `ow292642`, and the nickname lives in the official app and your Future Motion account. UnoWheel keeps its own nickname per board.
 

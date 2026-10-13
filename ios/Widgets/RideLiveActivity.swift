@@ -44,7 +44,8 @@ struct RideLiveActivity: Widget {
                                 .font(.callout.monospacedDigit())
                         }
                     } else {
-                        StatsRow(context: context)
+                        SideBattery(percent: state.batteryPercent, tint: batteryColor(state.batteryPercent))
+                            .frame(height: 26)
                             .padding(.horizontal, 4)
                     }
                 }
@@ -82,94 +83,78 @@ func stateColor(_ state: RideState) -> Color {
     }
 }
 
+/// Left of the battery: a speed gauge, always shown so the bar keeps its
+/// size, or a bolt while charging.
+private struct LeadingBadge: View {
+    let state: RideAttributes.ContentState
+
+    var body: some View {
+        if state.state == .charging {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(.green)
+        } else {
+            // Full scale is the model's top speed; the arc turns red near pushback.
+            let fraction = Double(state.speed) / Double(max(state.speedMax, 1))
+            ArcGauge(fraction: fraction, tint: fraction > 0.85 ? .red : .orange, lineWidth: 8) {
+                VStack(spacing: -4) {
+                    Text("\(state.speed)")
+                        .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+                        .contentTransition(.numericText())
+                    Text(state.unit)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// Lock screen: the battery as one big bar and the range under it. Speed
+/// only appears while moving.
 private struct LockScreenRide: View {
     let context: ActivityViewContext<RideAttributes>
 
     var body: some View {
         let state = context.state
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        let charging = state.state == .charging
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(context.attributes.boardName)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                StateBadge(state: state.state)
             }
-            if state.state == .charging {
-                ChargingBody(state: state)
-            } else {
-                HStack(alignment: .center, spacing: 16) {
-                    Speedometer(state: state)
-                        .frame(width: 104, height: 104)
-                    VStack(alignment: .leading, spacing: 6) {
-                        BatteryPill(percent: state.batteryPercent)
-                        BatteryBar(percent: state.batteryPercent)
-                        if !state.range.isEmpty {
-                            Text("\(state.range) left\(state.rangeLearned ? "" : " (rated)")")
-                                .font(.callout.weight(.medium).monospacedDigit())
-                        }
-                    }
+            HStack(alignment: .center, spacing: 16) {
+                LeadingBadge(state: state)
+                    .frame(width: 92, height: 92)
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 10) {
+                    SideBattery(percent: state.batteryPercent,
+                                tint: charging ? .green : batteryColor(state.batteryPercent),
+                                showsPercent: true)
+                        .frame(width: 160, height: 50)
+                    Text(mainLine(state))
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
-                StatsRow(context: context)
             }
         }
         .foregroundStyle(.white)
     }
-}
 
-/// Speed on an arc, scaled to the board's usual top speed.
-private struct Speedometer: View {
-    let state: RideAttributes.ContentState
-
-    var body: some View {
-        let fraction = Double(state.speed) / Double(max(state.speedMax, 1))
-        ArcGauge(fraction: fraction, tint: fraction > 0.85 ? .red : .orange, lineWidth: 9) {
-            VStack(spacing: -4) {
-                Text("\(state.speed)")
-                    .font(.system(size: 38, weight: .semibold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText())
-                Text(state.unit).font(.caption2).foregroundStyle(.secondary)
+    private func mainLine(_ state: RideAttributes.ContentState) -> String {
+        if state.state == .charging {
+            if state.toppingOff || state.batteryPercent >= 88 { return "Topping off" }
+            if let full = state.fullAt, full > .now {
+                let minutes = max(1, Int((full.timeIntervalSinceNow / 60).rounded()))
+                return "~\(minutes) min to 90%"
             }
+            return state.chargeWatts > 0 ? "\(state.chargeWatts) W" : "Charging"
         }
-    }
-}
-
-private struct ChargingBody: View {
-    let state: RideAttributes.ContentState
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(spacing: 6) {
-                HStack(spacing: 3) {
-                    Image(systemName: "bolt.fill").foregroundStyle(.green)
-                    Text("\(state.batteryPercent)%")
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                }
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                SideBattery(percent: state.batteryPercent)
-                    .frame(width: 104, height: 40)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                if state.toppingOff {
-                    Text("Topping off").font(.title2.weight(.semibold))
-                } else if let full = state.fullAt, full > .now {
-                    Text(timerInterval: Date.now...full, countsDown: true)
-                        .font(.system(size: 30, weight: .semibold, design: .rounded).monospacedDigit())
-                    Text("to 90%, about \(full.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Charging").font(.title2.weight(.semibold))
-                }
-                if state.chargeWatts > 0 {
-                    Label("\(state.chargeWatts) W", systemImage: "bolt.horizontal")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.green)
-                }
-            }
-            Spacer(minLength: 0)
-        }
+        return state.range.isEmpty ? "" : "\(state.range) left"
     }
 }
 
@@ -199,51 +184,6 @@ private struct StateBadge: View {
             .padding(.vertical, 3)
             .background(stateColor(state).opacity(0.25), in: .capsule)
             .foregroundStyle(stateColor(state))
-    }
-}
-
-private struct StatsRow: View {
-    let context: ActivityViewContext<RideAttributes>
-
-    var body: some View {
-        let state = context.state
-        HStack {
-            Label {
-                Text(timerInterval: context.attributes.startedAt...Date.distantFuture, countsDown: false)
-                    .monospacedDigit()
-            } icon: {
-                Image(systemName: "timer")
-            }
-            Spacer()
-            if !state.trip.isEmpty {
-                Label(state.trip, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                Spacer()
-            }
-            Label("\(state.topSpeed) top", systemImage: "gauge.with.needle")
-            if !state.rideMode.isEmpty {
-                Spacer()
-                Text(state.rideMode)
-            }
-        }
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-    }
-}
-
-private struct BatteryBar: View {
-    let percent: Int
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.15))
-                Capsule()
-                    .fill(batteryColor(percent).gradient)
-                    .frame(width: proxy.size.width * CGFloat(max(0, min(percent, 100))) / 100)
-            }
-        }
-        .frame(height: 6)
     }
 }
 

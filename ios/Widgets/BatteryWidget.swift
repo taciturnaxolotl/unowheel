@@ -295,6 +295,8 @@ struct BatteryWidgetView: View {
 struct SideBattery: View {
     let percent: Int
     var tint: Color = .green
+    /// Draw the percentage inside the battery.
+    var showsPercent = false
 
     var body: some View {
         let fraction = Double(max(0, min(percent, 100))) / 100
@@ -309,6 +311,15 @@ struct SideBattery: View {
                         .shadow(color: tint.opacity(0.4), radius: 6)
                 }
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.45), lineWidth: 2))
+                .overlay {
+                    if showsPercent {
+                        Text("\(percent)%")
+                            .font(.system(size: proxy.size.height * 0.5, weight: .bold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 2)
+                            .contentTransition(.numericText())
+                    }
+                }
             }
             RoundedRectangle(cornerRadius: 2)
                 .fill(tint.opacity(0.45))

@@ -110,6 +110,15 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(t.batteryCellsComplete)
     }
 
+    @Test func topSpeedPerMode() {
+        #expect(BoardModel.pint.topSpeedMPH(mode: 5) == 12)
+        #expect(BoardModel.pint.topSpeedMPH(mode: 7) == 16)
+        #expect(BoardModel.pintX.topSpeedMPH(mode: 8) == 18)
+        #expect(BoardModel.gts.topSpeedMPH(mode: 4) == 18)
+        #expect(BoardModel.gts.topSpeedMPH(mode: 8) == 25)
+        #expect(BoardModel.pint.topSpeedMPH(mode: nil) == 16)
+    }
+
     @Test func speedFromRpm() {
         var t = Telemetry()
         t.apply(.hardwareRevision, data: WireValue.encode(5314))

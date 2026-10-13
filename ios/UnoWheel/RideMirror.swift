@@ -142,7 +142,6 @@ final class RideMirror {
         }
         let metric = useMetric
         let speed = currentSpeed(t) ?? 0
-        let maxMPH = t.model == .pint || t.model == .pintX ? 20 : 25
         let rideState: RideState = t.status?.charging == true ? .charging
             : speed < 1 ? .stopped : t.isRegenerating ? .braking : .riding
         let state = RideAttributes.ContentState(
@@ -155,7 +154,7 @@ final class RideMirror {
             rangeLearned: rangeLearned,
             state: rideState,
             topSpeed: topSpeed,
-            speedMax: metric ? maxMPH * 8 / 5 : maxMPH,
+            speedMax: Int((t.model.topSpeedMPH(mode: t.rideMode) * (metric ? 1.609344 : 1)).rounded()),
             chargeWatts: Int(((t.chargingWatts ?? 0) / 5).rounded()) * 5,
             fullAt: t.isCharging ? fullAt : nil,
             toppingOff: t.isCharging && toppingOff
