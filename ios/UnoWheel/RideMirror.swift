@@ -12,6 +12,9 @@ final class RideMirror {
     private var lastState: RideAttributes.ContentState?
     private var lastWidgetReload = Date.distantPast
     private var topSpeed = 0
+    private var reportedDisabled = false
+    private var lastError: String?
+    var log: (String) -> Void = { _ in }
 
     init() {
         // A crash or force-quit can leave an activity behind; nothing will
@@ -90,7 +93,13 @@ final class RideMirror {
     }
 
     private func updateActivity(name: String, telemetry t: Telemetry, range: String?, rangeLearned: Bool, startedAt: Date) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            if !reportedDisabled {
+                reportedDisabled = true
+                log("Live Activities are off in Settings")
+            }
+            return
+        }
         let metric = useMetric
         let speed = Int((metric ? t.speedKPH : t.speedMPH)?.rounded() ?? 0)
         topSpeed = max(topSpeed, speed)
@@ -119,7 +128,18 @@ final class RideMirror {
         // iOS only lets an app start a Live Activity from the foreground, so a
         // board that auto-connects in the background gets one next time you
         // open UnoWheel.
-        activity = try? Activity.request(attributes: RideAttributes(boardName: name, startedAt: startedAt), content: content)
+        do {
+            activity = try Activity.request(attributes: RideAttributes(boardName: name, startedAt: startedAt), content: content)
+            log("Live Activity started")
+        } catch {
+            // Forget the state so the next tick tries again.
+            lastState = nil
+            let message = error.localizedDescription
+            if message != lastError {
+                lastError = message
+                log("Live Activity failed: \(message)")
+            }
+        }
     }
 
     private func endActivity() {

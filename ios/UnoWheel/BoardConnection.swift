@@ -120,6 +120,7 @@ final class BoardConnection: NSObject {
         central = CBCentralManager(delegate: self, queue: .main, options: [
             CBCentralManagerOptionRestoreIdentifierKey: "sh.dunkirk.unowheel.central",
         ])
+        mirror.log = { [weak self] line in self?.record(line) }
         mirrorTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
