@@ -16,6 +16,11 @@ struct BoardSnapshot: Codable, Equatable {
     var lifetime: String?
     var range: String?
     var charging: Bool? = nil
+    var chargeWatts: Int? = nil
+    /// Estimated time the pack will be full, rounded to the minute.
+    var fullAt: Date? = nil
+    var toppingOff: Bool? = nil
+    var lastRide: RideSummary? = nil
     var connected: Bool
     var updatedAt: Date
 
@@ -34,8 +39,23 @@ struct BoardSnapshot: Codable, Equatable {
         AppGroup.defaults.set(data, forKey: Self.key)
     }
 
-    static let preview = BoardSnapshot(name: "ow292642", model: "Pint", batteryPercent: 72, voltage: 58.4,
-                                       rideMode: "Pacific", lifetime: "412 mi", range: "5 mi", connected: false, updatedAt: .now)
+    static let preview = BoardSnapshot(name: "Turbo", model: "Pint", batteryPercent: 72, voltage: nil,
+                                       rideMode: "Pacific", lifetime: "412 mi", range: "5.1 mi",
+                                       lastRide: RideSummary(topSpeed: 17, unit: "mph", trip: "3.2 mi", minutes: 24, endedAt: .now),
+                                       connected: false, updatedAt: .now)
+
+    static let chargingPreview = BoardSnapshot(name: "Turbo", model: "Pint", batteryPercent: 46, voltage: nil,
+                                               rideMode: "Pacific", lifetime: "412 mi", range: "3.3 mi",
+                                               charging: true, chargeWatts: 170, fullAt: .now.addingTimeInterval(1800),
+                                               connected: true, updatedAt: .now)
+}
+
+struct RideSummary: Codable, Equatable, Hashable {
+    var topSpeed: Int
+    var unit: String
+    var trip: String
+    var minutes: Int
+    var endedAt: Date
 }
 
 enum RideState: String, Codable, Hashable {
@@ -71,6 +91,11 @@ struct RideAttributes: ActivityAttributes {
         var rangeLearned: Bool
         var state: RideState
         var topSpeed: Int
+        /// Full-scale value for the speedometer arc.
+        var speedMax: Int = 20
+        var chargeWatts: Int = 0
+        var fullAt: Date? = nil
+        var toppingOff: Bool = false
     }
 
     var boardName: String

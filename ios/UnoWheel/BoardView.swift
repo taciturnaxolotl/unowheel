@@ -1,4 +1,5 @@
 import OnewheelKit
+import Charts
 import SwiftUI
 
 struct BoardView: View {
@@ -16,7 +17,7 @@ struct BoardView: View {
                 status
                 if connection.phase == .unlocked {
                     if let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
-                    speedAndBattery
+                    if t.isCharging { chargingCard } else { speedAndBattery }
                     controls
                     statsGrid
                     if t.reportsCellVoltages { cells }
@@ -111,14 +112,7 @@ struct BoardView: View {
                 BatteryRing(percent: t.batteryPercent ?? 0, tint: batteryTint)
                     .frame(width: 112, height: 112)
             }
-            if t.status?.charging == true {
-                Divider()
-                Label("Charging", systemImage: "bolt.fill")
-                    .font(.headline)
-                    .foregroundStyle(.green)
-                    .symbolEffect(.pulse, options: .repeating)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if let km = connection.rangeKm {
+            if let km = connection.rangeKm {
                 Divider()
                 HStack(alignment: .firstTextBaseline) {
                     Label {
@@ -138,6 +132,66 @@ struct BoardView: View {
         }
         .padding(20)
         .background(.fill.tertiary, in: .rect(cornerRadius: 24))
+    }
+
+    private var chargingCard: some View {
+        let session = connection.chargeSession
+        let seconds = session?.secondsToFull(packWattHours: t.model.packWattHours)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Charging", systemImage: "bolt.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                        .symbolEffect(.pulse, options: .repeating)
+                    if connection.isToppingOff {
+                        Text("Topping off")
+                            .font(.system(size: 36, weight: .semibold, design: .rounded))
+                        Text("Reads 100%, still filling")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else if let seconds, seconds > 0 {
+                        Text(Self.duration(seconds))
+                            .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
+                            .contentTransition(.numericText())
+                        Text("to 90%, about \(Date.now.addingTimeInterval(seconds).formatted(date: .omitted, time: .shortened))")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else if t.batteryPercent == 100 {
+                        Text("Full").font(.system(size: 44, weight: .semibold, design: .rounded))
+                    } else {
+                        Text("Estimating").font(.title2.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                BatteryRing(percent: t.batteryPercent ?? 0, tint: .green)
+                    .frame(width: 112, height: 112)
+            }
+            if let session, session.samples.count > 1 {
+                ChargeChart(session: session)
+                    .frame(height: 110)
+            }
+            HStack {
+                if let watts = t.chargingWatts {
+                    Label(String(format: "%.0f W", watts), systemImage: "bolt.horizontal")
+                }
+                Spacer()
+                if let start = session?.startPercent, let now = t.batteryPercent, now > start {
+                    Text("+\(now - start)% since \(session!.startedAt.formatted(date: .omitted, time: .shortened))")
+                }
+                Spacer()
+                Text(session?.isMeasured == true ? "Measured" : "From power")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption.monospacedDigit())
+        }
+        .padding(20)
+        .background(.fill.tertiary, in: .rect(cornerRadius: 24))
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        let minutes = Int((seconds / 60).rounded(.up))
+        return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private func faultBanner(_ faults: [String]) -> some View {
@@ -239,13 +293,13 @@ struct BoardView: View {
 
     private var statsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            if let volts = t.batteryVoltage {
+            if let volts = connection.packVolts {
                 Stat("Voltage", String(format: "%.1f V", volts), icon: "bolt")
             }
-            if t.usesModernTelemetry {
+            if t.usesModernTelemetry, !t.isCharging {
                 Stat(t.isRegenerating ? "Regen" : "Power", t.powerWatts.map { abs($0) < 10 ? "Idle" : String(format: "%.0f W", abs($0)) },
                      icon: t.isRegenerating ? "arrow.uturn.backward" : "bolt.horizontal")
-            } else {
+            } else if !t.usesModernTelemetry {
                 Stat(t.isRegenerating ? "Regen" : "Current", t.currentAmps.map { String(format: "%.1f A", abs($0)) },
                      icon: t.isRegenerating ? "arrow.uturn.backward" : "arrow.forward")
             }
@@ -322,6 +376,37 @@ struct BoardView: View {
         guard let km else { return nil }
         let value = useMetric ? km : km * 0.621371
         return String(format: "%.\(decimals)f %@", value, useMetric ? "km" : "mi")
+    }
+}
+
+/// Battery percentage over the charging session.
+private struct ChargeChart: View {
+    let session: ChargeSession
+
+    var body: some View {
+        let low = max(0, ((session.samples.map(\.percent).min() ?? 0) - 5) / 10 * 10)
+        Chart(session.samples) { sample in
+            AreaMark(x: .value("Time", sample.date), yStart: .value("Base", low), yEnd: .value("Battery", sample.percent))
+                .foregroundStyle(.linearGradient(colors: [.green.opacity(0.35), .green.opacity(0.02)],
+                                                 startPoint: .top, endPoint: .bottom))
+                .interpolationMethod(.monotone)
+            LineMark(x: .value("Time", sample.date), y: .value("Battery", sample.percent))
+                .foregroundStyle(.green)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .interpolationMethod(.monotone)
+        }
+        .chartYScale(domain: low...100)
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: Array(Set([low, 50, 100])).filter { $0 >= low }.sorted()) { value in
+                AxisGridLine().foregroundStyle(.white.opacity(0.08))
+                AxisValueLabel { if let v = value.as(Int.self) { Text("\(v)%") } }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                AxisValueLabel(format: .dateTime.hour().minute())
+            }
+        }
     }
 }
 

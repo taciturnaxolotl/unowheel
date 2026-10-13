@@ -71,6 +71,13 @@ final class BoardConnection: NSObject {
     private(set) var log: [String] = []
     private(set) var range = RangeEstimator()
     private(set) var unlockedAt: Date?
+    private(set) var chargeSession: ChargeSession?
+    private(set) var voltage = PackVoltageEstimator()
+
+    /// Reported pack voltage, or worked out from power and charge counters
+    /// on firmware that stopped reporting it.
+    var packVolts: Double? { telemetry.batteryVoltage ?? voltage.volts }
+    var isToppingOff: Bool { ChargeSession.isToppingOff(percent: telemetry.batteryPercent, watts: telemetry.chargingWatts) }
 
     var rangeKm: Double? { range.rangeKm(for: telemetry) }
 
@@ -134,12 +141,20 @@ final class BoardConnection: NSObject {
         let elapsed = now.timeIntervalSince(lastTick)
         lastTick = now
         guard isConnected else { return }
-        if phase == .unlocked {
+        if phase == .unlocked { voltage.record(telemetry, at: now) }
+        if phase == .unlocked, telemetry.isCharging, let percent = telemetry.batteryPercent {
+            if chargeSession == nil { chargeSession = ChargeSession() }
+            chargeSession?.record(percent: percent, watts: telemetry.chargingWatts)
+        } else if !telemetry.isCharging {
+            chargeSession = nil
+        }
+        if phase == .unlocked, !telemetry.isCharging {
             range.record(telemetry, seconds: elapsed)
             if now.timeIntervalSince(lastRangeSave) > 30 { saveRange() }
         }
         mirror.sync(name: displayName, telemetry: telemetry, unlocked: phase == .unlocked,
-                    rangeKm: rangeKm, rangeLearned: range.isLearned, startedAt: unlockedAt)
+                    rangeKm: rangeKm, rangeLearned: range.isLearned, startedAt: unlockedAt,
+                    charge: chargeSession)
     }
 
     private func loadRange(for board: String) {
@@ -173,6 +188,16 @@ final class BoardConnection: NSObject {
         t.apply(.pitch, data: WireValue.encode(1776))
         for word: UInt16 in [0x2008, 0xc006, 0xf000, 0xf101, 0xf264, 0xd000, 0xd113, 0xd29c, 0xd3d4] {
             t.apply(.lastErrorCode, data: WireValue.encode(word))
+        }
+        if CommandLine.arguments.contains("-charging") {
+            t.apply(.statusError, data: WireValue.encode(0x2004))
+            t.apply(.batteryLow5, data: WireValue.encode(UInt16(bitPattern: -170)))
+            t.apply(.batteryPercent, data: WireValue.encode(46))
+            var session = ChargeSession(startedAt: .now.addingTimeInterval(-900))
+            for i in 0...30 {
+                session.record(percent: 22 + Int(Double(i) * 0.8), watts: 170, at: .now.addingTimeInterval(Double(i - 30) * 30))
+            }
+            chargeSession = session
         }
         telemetry = t
         unlockedAt = .now.addingTimeInterval(-600)
@@ -211,6 +236,8 @@ final class BoardConnection: NSObject {
         characteristics = [:]
         assembler.reset()
         unlockedAt = nil
+        chargeSession = nil
+        voltage = PackVoltageEstimator()
         loadRange(for: name)
         peripheral = target
         target.delegate = self

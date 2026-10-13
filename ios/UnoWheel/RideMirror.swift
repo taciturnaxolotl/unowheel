@@ -12,6 +12,8 @@ final class RideMirror {
     private var lastState: RideAttributes.ContentState?
     private var lastWidgetReload = Date.distantPast
     private var topSpeed = 0
+    private var rideStartedAt: Date?
+    private var rideTrip = ""
     private var reportedDisabled = false
     private var lastError: String?
     var log: (String) -> Void = { _ in }
@@ -31,19 +33,51 @@ final class RideMirror {
     }
 
     func sync(name: String?, telemetry t: Telemetry, unlocked: Bool,
-              rangeKm: Double?, rangeLearned: Bool, startedAt: Date?) {
+              rangeKm: Double?, rangeLearned: Bool, startedAt: Date?, charge: ChargeSession?) {
         guard let name else {
             finish()
             return
         }
         let range = rangeKm.map(formatRange)
-        updateSnapshot(name: name, telemetry: t, connected: unlocked, range: range)
+        let toppingOff = ChargeSession.isToppingOff(percent: t.batteryPercent, watts: t.chargingWatts)
+        let fullAt = toppingOff ? nil : charge?.secondsToFull(packWattHours: t.model.packWattHours).map { Self.minute(.now + $0) }
+        if unlocked, !t.isCharging, let speed = currentSpeed(t), speed > 0 {
+            topSpeed = max(topSpeed, speed)
+            if rideStartedAt == nil { rideStartedAt = .now }
+            rideTrip = formattedTrip(t)
+        }
+        updateSnapshot(name: name, telemetry: t, connected: unlocked, range: range, fullAt: fullAt, toppingOff: toppingOff)
         if unlocked {
             updateActivity(name: name, telemetry: t, range: range, rangeLearned: rangeLearned,
-                           startedAt: startedAt ?? .now)
+                           startedAt: startedAt ?? .now, fullAt: fullAt, toppingOff: toppingOff)
         } else {
             endActivity()
         }
+    }
+
+    private static func minute(_ date: Date) -> Date {
+        Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate / 60).rounded() * 60)
+    }
+
+    private func currentSpeed(_ t: Telemetry) -> Int? {
+        (useMetric ? t.speedKPH : t.speedMPH).map { Int($0.rounded()) }
+    }
+
+    private func formattedTrip(_ t: Telemetry) -> String {
+        (useMetric ? t.tripKilometres : t.tripMiles).map { String(format: "%.1f %@", $0, useMetric ? "km" : "mi") } ?? ""
+    }
+
+    /// Saves the ride that just ended for the widgets, if there was one.
+    private func closeRide() {
+        defer {
+            topSpeed = 0
+            rideStartedAt = nil
+            rideTrip = ""
+        }
+        guard topSpeed > 0, let started = rideStartedAt, var snapshot = lastSnapshot ?? BoardSnapshot.load() else { return }
+        snapshot.lastRide = RideSummary(topSpeed: topSpeed, unit: useMetric ? "km/h" : "mph", trip: rideTrip,
+                                        minutes: max(1, Int(Date.now.timeIntervalSince(started) / 60)), endedAt: .now)
+        write(snapshot, force: true)
     }
 
     private func formatRange(_ km: Double) -> String {
@@ -53,6 +87,7 @@ final class RideMirror {
     }
 
     func finish() {
+        closeRide()
         if var snapshot = lastSnapshot, snapshot.connected {
             snapshot.connected = false
             snapshot.updatedAt = .now
@@ -61,7 +96,7 @@ final class RideMirror {
         endActivity()
     }
 
-    private func updateSnapshot(name: String, telemetry t: Telemetry, connected: Bool, range: String?) {
+    private func updateSnapshot(name: String, telemetry t: Telemetry, connected: Bool, range: String?, fullAt: Date?, toppingOff: Bool) {
         let previous = lastSnapshot ?? BoardSnapshot.load()
         var snapshot = BoardSnapshot(
             name: name,
@@ -72,6 +107,10 @@ final class RideMirror {
             lifetime: t.lifetimeMiles.map { useMetric ? "\(Int(Double($0) * 1.60934)) km" : "\($0) mi" } ?? previous?.lifetime,
             range: range ?? previous?.range,
             charging: t.status.map(\.charging) ?? previous?.charging,
+            chargeWatts: t.chargingWatts.map { Int(($0 / 5).rounded()) * 5 },
+            fullAt: t.isCharging ? fullAt : nil,
+            toppingOff: t.isCharging && toppingOff,
+            lastRide: previous?.lastRide,
             connected: connected,
             updatedAt: previous?.updatedAt ?? .now
         )
@@ -92,7 +131,8 @@ final class RideMirror {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    private func updateActivity(name: String, telemetry t: Telemetry, range: String?, rangeLearned: Bool, startedAt: Date) {
+    private func updateActivity(name: String, telemetry t: Telemetry, range: String?, rangeLearned: Bool,
+                                startedAt: Date, fullAt: Date?, toppingOff: Bool) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             if !reportedDisabled {
                 reportedDisabled = true
@@ -101,8 +141,8 @@ final class RideMirror {
             return
         }
         let metric = useMetric
-        let speed = Int((metric ? t.speedKPH : t.speedMPH)?.rounded() ?? 0)
-        topSpeed = max(topSpeed, speed)
+        let speed = currentSpeed(t) ?? 0
+        let maxMPH = t.model == .pint || t.model == .pintX ? 20 : 25
         let rideState: RideState = t.status?.charging == true ? .charging
             : speed < 1 ? .stopped : t.isRegenerating ? .braking : .riding
         let state = RideAttributes.ContentState(
@@ -110,11 +150,15 @@ final class RideMirror {
             unit: metric ? "km/h" : "mph",
             batteryPercent: t.batteryPercent ?? 0,
             rideMode: t.rideMode.map(t.model.rideModeName) ?? "",
-            trip: (metric ? t.tripKilometres : t.tripMiles).map { String(format: "%.1f %@", $0, metric ? "km" : "mi") } ?? "",
+            trip: formattedTrip(t),
             range: range ?? "",
             rangeLearned: rangeLearned,
             state: rideState,
-            topSpeed: topSpeed
+            topSpeed: topSpeed,
+            speedMax: metric ? maxMPH * 8 / 5 : maxMPH,
+            chargeWatts: Int(((t.chargingWatts ?? 0) / 5).rounded()) * 5,
+            fullAt: t.isCharging ? fullAt : nil,
+            toppingOff: t.isCharging && toppingOff
         )
         guard state != lastState else { return }
         lastState = state
@@ -145,7 +189,6 @@ final class RideMirror {
     private func endActivity() {
         guard let activity else { return }
         self.activity = nil
-        topSpeed = 0
         let id = activity.id
         let final = lastState.map { ActivityContent(state: $0, staleDate: nil) }
         lastState = nil

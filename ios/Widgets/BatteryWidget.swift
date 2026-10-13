@@ -16,7 +16,10 @@ struct BatteryProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BatteryEntry>) -> Void) {
-        let snapshot = BoardSnapshot.load()
+        var snapshot = BoardSnapshot.load()
+        // Charging is only true while the app can see the board. If the
+        // estimate has passed, call it full rather than show a stale ETA.
+        if let full = snapshot?.fullAt, full < .now { snapshot?.fullAt = nil }
         // One entry per minute for the first hour, then hourly, so the coarse
         // "5m" / "2h" label stays right without the app having to wake.
         let now = Date.now
@@ -42,10 +45,12 @@ struct BatteryWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BoardBattery", provider: BatteryProvider()) { entry in
             BatteryWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) {
+                    LinearGradient(colors: [Color(white: 0.16), Color(white: 0.08)], startPoint: .top, endPoint: .bottom)
+                }
         }
         .configurationDisplayName("Board battery")
-        .description("Battery level from the last connection.")
+        .description("Battery, range and your last ride.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -55,6 +60,33 @@ func batteryColor(_ percent: Int) -> Color {
     case ..<20: .red
     case ..<40: .orange
     default: .green
+    }
+}
+
+/// A 270 degree arc gauge, open at the bottom like a fuel gauge.
+struct ArcGauge<Center: View>: View {
+    let fraction: Double
+    let tint: Color
+    var lineWidth: CGFloat = 12
+    @ViewBuilder let center: Center
+
+    private let sweep = 0.75
+
+    var body: some View {
+        ZStack {
+            arc(to: 1).stroke(.white.opacity(0.1), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            arc(to: max(0.001, min(fraction, 1)))
+                .stroke(AngularGradient(colors: [tint.opacity(0.55), tint], center: .center,
+                                        startAngle: .degrees(135), endAngle: .degrees(135 + 360 * sweep * max(fraction, 0.01))),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .shadow(color: tint.opacity(0.45), radius: lineWidth / 2)
+            center
+        }
+        .padding(lineWidth / 2)
+    }
+
+    private func arc(to fraction: Double) -> some Shape {
+        Circle().trim(from: 0, to: sweep * fraction).rotation(.degrees(135))
     }
 }
 
@@ -74,121 +106,234 @@ struct BatteryWidgetView: View {
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "circle.circle").font(.title)
-                Text("No board yet").font(.caption).multilineTextAlignment(.center)
+                Text("No board yet").font(.caption)
             }
             .foregroundStyle(.secondary)
         }
     }
 
-    private var percentFallback: Int { entry.snapshot?.batteryPercent ?? 0 }
+    private func isCharging(_ s: BoardSnapshot) -> Bool { s.connected && s.charging == true }
 
-    private func ring(_ snapshot: BoardSnapshot, lineWidth: CGFloat) -> some View {
-        let percent = snapshot.batteryPercent ?? 0
-        return ZStack {
-            Circle().stroke(.quaternary, lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: Double(percent) / 100)
-                .stroke(batteryColor(percent), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 0) {
+    private func tint(_ s: BoardSnapshot) -> Color {
+        isCharging(s) ? .green : batteryColor(s.batteryPercent ?? 0)
+    }
+
+    private func gauge(_ s: BoardSnapshot, lineWidth: CGFloat, digits: Font) -> some View {
+        let percent = s.batteryPercent ?? 0
+        return ArcGauge(fraction: Double(percent) / 100, tint: tint(s), lineWidth: lineWidth) {
+            VStack(spacing: -2) {
                 Text("\(percent)")
-                    .font(.system(.title, design: .rounded).weight(.semibold).monospacedDigit())
-                Text("%").font(.caption2).foregroundStyle(.secondary)
+                    .font(digits.weight(.semibold).monospacedDigit())
+                    .minimumScaleFactor(0.6)
+                Image(systemName: isCharging(s) ? "bolt.fill" : "battery.75percent")
+                    .font(.caption2)
+                    .foregroundStyle(isCharging(s) ? .green : .secondary)
             }
         }
     }
 
-    private func status(_ snapshot: BoardSnapshot) -> some View {
+    private func status(_ s: BoardSnapshot) -> some View {
+        Text(isCharging(s) ? "Charging" : s.connected ? "Connected" : shortAge(from: s.updatedAt, to: entry.date))
+            .font(.caption2)
+            .foregroundStyle(s.connected ? .green : .secondary)
+            .lineLimit(1)
+    }
+
+    private func headline(_ s: BoardSnapshot) -> String? {
+        if isCharging(s) {
+            if s.toppingOff == true { return "Topping off" }
+            if let full = s.fullAt { return "90% at \(full.formatted(date: .omitted, time: .shortened))" }
+            return s.chargeWatts.map { "\($0) W" }
+        }
+        return s.range.map { "\($0) left" }
+    }
+
+    private func small(_ s: BoardSnapshot) -> some View {
         Group {
-            if snapshot.connected && snapshot.charging == true {
-                Label("Charging", systemImage: "bolt.fill")
-                    .foregroundStyle(.green)
-            } else if snapshot.connected {
-                Label("Connected", systemImage: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(.green)
-            } else {
-                Text(shortAge(from: snapshot.updatedAt, to: entry.date))
-            }
+            if isCharging(s) { chargingSmall(s) } else { restingSmall(s) }
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
     }
 
-    private func small(_ snapshot: BoardSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func restingSmall(_ s: BoardSnapshot) -> some View {
+        VStack(spacing: 4) {
             HStack {
-                Text(snapshot.title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
+                Text(s.title).font(.caption.weight(.semibold)).lineLimit(1)
                 Spacer()
+                status(s)
             }
-            ring(snapshot, lineWidth: 9)
-                .frame(maxWidth: .infinity)
-            if let range = snapshot.range {
-                Text("\(range) left").font(.caption2.weight(.semibold)).lineLimit(1)
+            gauge(s, lineWidth: 11, digits: .system(size: 34, design: .rounded))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let range = s.range {
+                Label("\(range) left", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
             }
-            status(snapshot)
         }
     }
 
-    private func medium(_ snapshot: BoardSnapshot) -> some View {
-        HStack(spacing: 16) {
-            ring(snapshot, lineWidth: 10)
-                .frame(width: 110)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(snapshot.title).font(.headline).lineLimit(1)
-                Text(snapshot.model).font(.subheadline).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                if let range = snapshot.range {
-                    Label("\(range) left", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                        .font(.caption.weight(.semibold))
+    /// Charging uses a battery shape, not the arc, so it can't be mistaken
+    /// for a speedometer.
+    private func chargingSmall(_ s: BoardSnapshot) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 4) {
+                Image(systemName: "bolt.fill").foregroundStyle(.green)
+                Text("\(s.batteryPercent ?? 0)%").monospacedDigit()
+            }
+            .font(.system(size: 30, weight: .semibold, design: .rounded))
+            SegmentedBattery(percent: s.batteryPercent ?? 0)
+                .frame(height: 44)
+            Text(chargeLine(s))
+                .font(.subheadline.weight(.medium).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    /// "~25 min", "Topping off", or the charge power while we wait to estimate.
+    private func chargeLine(_ s: BoardSnapshot) -> String {
+        if s.toppingOff == true { return "Topping off" }
+        if let full = s.fullAt {
+            let minutes = max(1, Int((full.timeIntervalSince(entry.date) / 60).rounded()))
+            return minutes < 60 ? "~\(minutes) min to 90%" : "~\(minutes / 60)h \(minutes % 60)m to 90%"
+        }
+        return s.chargeWatts.map { "\($0) W" } ?? "Charging"
+    }
+
+    private func medium(_ s: BoardSnapshot) -> some View {
+        Group {
+            if isCharging(s) { chargingMedium(s) } else { restingMedium(s) }
+        }
+    }
+
+    private func chargingMedium(_ s: BoardSnapshot) -> some View {
+        HStack(spacing: 18) {
+            VStack(spacing: 10) {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.fill").foregroundStyle(.green)
+                    Text("\(s.batteryPercent ?? 0)%").monospacedDigit()
                 }
-                if let mode = snapshot.rideMode {
-                    Label(mode, systemImage: "figure.skateboarding").font(.caption)
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                SegmentedBattery(percent: s.batteryPercent ?? 0)
+                    .frame(width: 140, height: 50)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(s.title).font(.headline).lineLimit(1)
+                StatRow(icon: "clock.fill", tint: .green, text: chargeLine(s))
+                if let watts = s.chargeWatts {
+                    StatRow(icon: "powerplug.fill", tint: .yellow, text: "\(watts) W")
                 }
-                if let voltage = snapshot.voltage {
-                    Label(String(format: "%.1f V", voltage), systemImage: "bolt").font(.caption)
+                if let range = s.range {
+                    StatRow(icon: "point.topleft.down.to.point.bottomright.curvepath", tint: .blue, text: "\(range) range")
                 }
-                if let lifetime = snapshot.lifetime {
-                    Label(lifetime, systemImage: "road.lanes").font(.caption)
-                }
-                status(snapshot)
             }
             Spacer(minLength: 0)
         }
     }
 
-    private func circular(_ snapshot: BoardSnapshot) -> some View {
-        Gauge(value: Double(snapshot.batteryPercent ?? 0), in: 0...100) {
-            Image(systemName: "circle.circle")
-        } currentValueLabel: {
-            Text("\(snapshot.batteryPercent ?? 0)")
+    private func restingMedium(_ s: BoardSnapshot) -> some View {
+        HStack(spacing: 16) {
+            gauge(s, lineWidth: 13, digits: .system(size: 40, design: .rounded))
+                .frame(width: 124)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(s.title).font(.headline).lineLimit(1)
+                    Spacer()
+                    status(s)
+                }
+                if let range = s.range {
+                    StatRow(icon: "point.topleft.down.to.point.bottomright.curvepath", tint: .blue, text: "\(range) left")
+                }
+                if let ride = s.lastRide {
+                    StatRow(icon: "gauge.with.needle.fill", tint: .orange, text: "\(ride.topSpeed) \(ride.unit) top")
+                    if !ride.trip.isEmpty {
+                        StatRow(icon: "flag.checkered", tint: .purple, text: "\(ride.trip) in \(ride.minutes)m")
+                    }
+                } else {
+                    if let mode = s.rideMode {
+                        StatRow(icon: "figure.skateboarding", tint: .orange, text: mode)
+                    }
+                    if let lifetime = s.lifetime {
+                        StatRow(icon: "road.lanes", tint: .purple, text: "\(lifetime) total")
+                    }
+                }
+            }
         }
-        .gaugeStyle(.accessoryCircularCapacity)
+    }
+
+    private func circular(_ s: BoardSnapshot) -> some View {
+        Gauge(value: Double(s.batteryPercent ?? 0), in: 0...100) {
+            Image(systemName: isCharging(s) ? "bolt.fill" : "circle.circle")
+        } currentValueLabel: {
+            Text("\(s.batteryPercent ?? 0)")
+        }
+        .gaugeStyle(.accessoryCircular)
         .widgetAccentable()
     }
 
-    private func rectangular(_ snapshot: BoardSnapshot) -> some View {
+    private func rectangular(_ s: BoardSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(snapshot.title).font(.headline).widgetAccentable()
-            Gauge(value: Double(snapshot.batteryPercent ?? 0), in: 0...100) {
-                EmptyView()
-            } currentValueLabel: {
-                Text("\(snapshot.batteryPercent ?? 0)%")
+            HStack {
+                Text(s.title).font(.headline).widgetAccentable()
+                Spacer()
+                Text("\(s.batteryPercent ?? 0)%").font(.headline.monospacedDigit())
             }
-            .gaugeStyle(.accessoryLinearCapacity)
-            if let range = snapshot.range {
-                Text("\(range) left").font(.caption)
-            } else {
-                status(snapshot)
-            }
+            Gauge(value: Double(s.batteryPercent ?? 0), in: 0...100) { EmptyView() }
+                .gaugeStyle(.accessoryLinearCapacity)
+            Text(headline(s) ?? shortAge(from: s.updatedAt, to: entry.date)).font(.caption)
         }
     }
 
-    private func inline(_ snapshot: BoardSnapshot) -> some View {
-        Label(snapshot.range.map { "\(snapshot.batteryPercent ?? 0)% · \($0)" } ?? "\(snapshot.batteryPercent ?? 0)% \(snapshot.title)",
-              systemImage: "circle.circle")
+    private func inline(_ s: BoardSnapshot) -> some View {
+        Label("\(s.batteryPercent ?? 0)%" + (headline(s).map { " · \($0)" } ?? ""),
+              systemImage: isCharging(s) ? "bolt.fill" : "circle.circle")
+    }
+}
+
+/// Five cells, filled left to right. The partly filled cell fills from the
+/// bottom, like a battery icon.
+struct SegmentedBattery: View {
+    let percent: Int
+    var segments = 5
+
+    var body: some View {
+        let perCell = 100.0 / Double(segments)
+        HStack(spacing: 5) {
+            ForEach(0..<segments, id: \.self) { index in
+                let fill = min(1, max(0, (Double(percent) - Double(index) * perCell) / perCell))
+                ZStack(alignment: .bottom) {
+                    RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08))
+                    GeometryReader { proxy in
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.green.gradient)
+                            .frame(height: proxy.size.height * fill)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                }
+            }
+        }
+        .padding(5)
+        .background(Color.green.opacity(0.18), in: .rect(cornerRadius: 10))
+    }
+}
+
+/// A coloured icon and a value, one per line.
+struct StatRow: View {
+    let icon: String
+    let tint: Color
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 16)
+            Text(text)
+                .font(.subheadline.weight(.medium).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
     }
 }
 
@@ -196,10 +341,12 @@ struct BatteryWidgetView: View {
     BatteryWidget()
 } timeline: {
     BatteryEntry(date: .now, snapshot: .preview)
+    BatteryEntry(date: .now, snapshot: .chargingPreview)
 }
 
 #Preview(as: .systemMedium) {
     BatteryWidget()
 } timeline: {
     BatteryEntry(date: .now, snapshot: .preview)
+    BatteryEntry(date: .now, snapshot: .chargingPreview)
 }
