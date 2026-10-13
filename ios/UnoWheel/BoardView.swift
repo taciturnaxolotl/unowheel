@@ -16,6 +16,7 @@ struct BoardView: View {
             VStack(spacing: 20) {
                 status
                 if connection.phase == .unlocked {
+                    if let error = t.status?.error { errorBanner(error) }
                     if let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
                     if t.isCharging { chargingCard } else { speedAndBattery }
                     controls
@@ -147,9 +148,6 @@ struct BoardView: View {
                     if connection.isToppingOff {
                         Text("Topping off")
                             .font(.system(size: 36, weight: .semibold, design: .rounded))
-                        Text("Reads 100%, still filling")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     } else if let seconds, seconds > 0 {
                         Text(Self.duration(seconds))
                             .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
@@ -175,13 +173,6 @@ struct BoardView: View {
                 if let watts = t.chargingWatts {
                     Label(String(format: "%.0f W", watts), systemImage: "bolt.horizontal")
                 }
-                Spacer()
-                if let start = session?.startPercent, let now = t.batteryPercent, now > start {
-                    Text("+\(now - start)% since \(session!.startedAt.formatted(date: .omitted, time: .shortened))")
-                }
-                Spacer()
-                Text(session?.isMeasured == true ? "Measured" : "From power")
-                    .foregroundStyle(.secondary)
             }
             .font(.caption.monospacedDigit())
         }
@@ -192,6 +183,24 @@ struct BoardView: View {
     static func duration(_ seconds: TimeInterval) -> String {
         let minutes = Int((seconds / 60).rounded(.up))
         return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    private func errorBanner(_ error: BoardErrorCode) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(error.title).font(.headline)
+                Text(error.advice).font(.subheadline)
+                Text("Error \(error.code)").font(.caption).opacity(0.7)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.orange)
+        .padding(16)
+        .background(.orange.opacity(0.15), in: .rect(cornerRadius: 20))
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .sensoryFeedback(.warning, trigger: error.code)
     }
 
     private func faultBanner(_ faults: [String]) -> some View {

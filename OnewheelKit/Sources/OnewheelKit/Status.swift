@@ -14,6 +14,11 @@ public struct BoardStatus: Equatable, Sendable {
     public var backPad: Bool { raw & 0x0400 != 0 }
     public var charging: Bool { raw & 0x2000 != 0 }
 
+    /// Low byte: the board's current error code, 0 when all is well.
+    public var errorCode: UInt8 { UInt8(raw & 0xff) }
+
+    public var error: BoardErrorCode? { errorCode == 0 ? nil : BoardErrorCode(code: errorCode) }
+
     public var faults: [String] {
         var out: [String] = []
         if raw & 0x0800 != 0 { out.append("Current sensor U") }
@@ -68,5 +73,47 @@ public struct BatteryDiagnostics: Equatable, Sendable {
         9: "Sony VTC6A, 18s2p",
         10: "Molicel P42A, 18s2p",
         11: "Samsung 40T3, 18s2p",
+    ]
+}
+
+/// Error codes from the low byte of `30f`. Titles and advice follow the
+/// official app (`b2.m` in the Android build), shortened.
+public struct BoardErrorCode: Equatable, Sendable {
+    public let code: UInt8
+    public let title: String
+    public let advice: String
+
+    public init(code: UInt8) {
+        self.code = code
+        let (title, advice) = Self.table[code] ?? ("Error \(code)", "Check the manual or contact support.")
+        self.title = title
+        self.advice = advice
+    }
+
+    static let table: [UInt8: (String, String)] = [
+        1: ("Battery low", "Charge the board."),
+        2: ("Battery low", "Charge the board."),
+        3: ("Battery full", "Avoid steep downhills and hard braking while fully charged."),
+        4: ("Start in the ready position", "Put the board flat on the ground, then turn it off and on."),
+        5: ("Start in the ready position", "Put the board flat on the ground before you press power."),
+        6: ("Overcurrent", "Turn the board off and on."),
+        7: ("Battery too hot or cold", "Let the battery reach a normal temperature."),
+        8: ("Battery too hot or cold", "Let the battery reach a normal temperature."),
+        9: ("Accelerometer check failed", "Turn the board off and on."),
+        10: ("Current sensor check failed", "Turn the board off and on."),
+        11: ("Motor sensor problem", "Check the motor connection, then turn the board off and on."),
+        12: ("Motor check failed", "Turn the board off and on."),
+        13: ("Overcurrent", "Turn the board off and on."),
+        14: ("Overcurrent", "Turn the board off and on."),
+        15: ("Footpad pressed at startup", "Keep off the footpad while turning the board on."),
+        16: ("Communication error", "Turn the board off and on. Contact support if it continues."),
+        17: ("Battery too hot or cold", "Let the battery reach a normal temperature."),
+        18: ("Motor too hot or cold", "Let the motor reach a normal temperature."),
+        19: ("Overcharged", "Avoid steep downhills and hard braking while fully charged."),
+        20: ("Board disabled", "Contact support."),
+        21: ("Charger connected", "Unplug the charger to ride."),
+        22: ("New battery detected", "Register the new hardware in the official app."),
+        23: ("Incompatible hardware", "Contact support."),
+        25: ("New controller detected", "Register the new hardware in the official app."),
     ]
 }

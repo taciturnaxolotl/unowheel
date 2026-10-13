@@ -118,31 +118,19 @@ struct BatteryWidgetView: View {
         isCharging(s) ? .green : batteryColor(s.batteryPercent ?? 0)
     }
 
-    private func gauge(_ s: BoardSnapshot, lineWidth: CGFloat, digits: Font) -> some View {
-        let percent = s.batteryPercent ?? 0
-        return ArcGauge(fraction: Double(percent) / 100, tint: tint(s), lineWidth: lineWidth) {
-            VStack(spacing: -2) {
-                Text("\(percent)")
-                    .font(digits.weight(.semibold).monospacedDigit())
-                    .minimumScaleFactor(0.6)
-                Image(systemName: isCharging(s) ? "bolt.fill" : "battery.75percent")
-                    .font(.caption2)
-                    .foregroundStyle(isCharging(s) ? .green : .secondary)
-            }
-        }
-    }
-
-    private func status(_ s: BoardSnapshot) -> some View {
-        Text(isCharging(s) ? "Charging" : s.connected ? "Connected" : shortAge(from: s.updatedAt, to: entry.date))
+    /// "now", "5m ago": when the app last heard from the board.
+    private func age(_ s: BoardSnapshot) -> some View {
+        Text(s.connected ? "now" : shortAge(from: s.updatedAt, to: entry.date))
             .font(.caption2)
-            .foregroundStyle(s.connected ? .green : .secondary)
+            .foregroundStyle(.secondary)
             .lineLimit(1)
+            .fixedSize()
     }
 
     private func headline(_ s: BoardSnapshot) -> String? {
         if isCharging(s) {
-            if s.toppingOff == true { return "Topping off" }
-            if let full = s.fullAt { return "90% at \(full.formatted(date: .omitted, time: .shortened))" }
+            if s.toppingOff == true || (s.batteryPercent ?? 0) >= 88 { return "Topping off" }
+            if let full = s.fullAt, full > entry.date { return "90% at \(full.formatted(date: .omitted, time: .shortened))" }
             return s.chargeWatts.map { "\($0) W" }
         }
         return s.range.map { "\($0) left" }
@@ -156,17 +144,24 @@ struct BatteryWidgetView: View {
 
     private func restingSmall(_ s: BoardSnapshot) -> some View {
         VStack(spacing: 4) {
+            Text(s.title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+            Text("\(s.batteryPercent ?? 0)%")
+                .font(.system(size: 30, weight: .semibold, design: .rounded).monospacedDigit())
+            SideBattery(percent: s.batteryPercent ?? 0, tint: tint(s))
+                .frame(height: 44)
+            Spacer(minLength: 0)
             HStack {
-                Text(s.title).font(.caption.weight(.semibold)).lineLimit(1)
-                Spacer()
-                status(s)
-            }
-            gauge(s, lineWidth: 11, digits: .system(size: 34, design: .rounded))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let range = s.range {
-                Label("\(range) left", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .lineLimit(1)
+                if let range = s.range {
+                    Label("\(range) left", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                age(s)
             }
         }
     }
@@ -180,20 +175,23 @@ struct BatteryWidgetView: View {
                 Text("\(s.batteryPercent ?? 0)%").monospacedDigit()
             }
             .font(.system(size: 30, weight: .semibold, design: .rounded))
-            SegmentedBattery(percent: s.batteryPercent ?? 0)
+            SideBattery(percent: s.batteryPercent ?? 0)
                 .frame(height: 44)
-            Text(chargeLine(s))
-                .font(.subheadline.weight(.medium).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack(alignment: .firstTextBaseline) {
+                Text(chargeLine(s))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                age(s)
+            }
         }
     }
 
     /// "~25 min", "Topping off", or the charge power while we wait to estimate.
     private func chargeLine(_ s: BoardSnapshot) -> String {
-        if s.toppingOff == true { return "Topping off" }
-        if let full = s.fullAt {
+        if s.toppingOff == true || (s.batteryPercent ?? 0) >= 88 { return "Topping off" }
+        if let full = s.fullAt, full > entry.date {
             let minutes = max(1, Int((full.timeIntervalSince(entry.date) / 60).rounded()))
             return minutes < 60 ? "~\(minutes) min to 90%" : "~\(minutes / 60)h \(minutes % 60)m to 90%"
         }
@@ -214,7 +212,7 @@ struct BatteryWidgetView: View {
                     Text("\(s.batteryPercent ?? 0)%").monospacedDigit()
                 }
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
-                SegmentedBattery(percent: s.batteryPercent ?? 0)
+                SideBattery(percent: s.batteryPercent ?? 0)
                     .frame(width: 140, height: 50)
             }
             VStack(alignment: .leading, spacing: 8) {
@@ -227,20 +225,21 @@ struct BatteryWidgetView: View {
                     StatRow(icon: "point.topleft.down.to.point.bottomright.curvepath", tint: .blue, text: "\(range) range")
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .bottomTrailing) { age(s) }
         }
     }
 
     private func restingMedium(_ s: BoardSnapshot) -> some View {
         HStack(spacing: 16) {
-            gauge(s, lineWidth: 13, digits: .system(size: 40, design: .rounded))
-                .frame(width: 124)
+            VStack(spacing: 10) {
+                Text("\(s.batteryPercent ?? 0)%")
+                    .font(.system(size: 30, weight: .semibold, design: .rounded).monospacedDigit())
+                SideBattery(percent: s.batteryPercent ?? 0, tint: tint(s))
+                    .frame(width: 140, height: 50)
+            }
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(s.title).font(.headline).lineLimit(1)
-                    Spacer()
-                    status(s)
-                }
+                Text(s.title).font(.headline).lineLimit(1)
                 if let range = s.range {
                     StatRow(icon: "point.topleft.down.to.point.bottomright.curvepath", tint: .blue, text: "\(range) left")
                 }
@@ -258,6 +257,8 @@ struct BatteryWidgetView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .bottomTrailing) { age(s) }
         }
     }
 
@@ -290,30 +291,30 @@ struct BatteryWidgetView: View {
     }
 }
 
-/// Five cells, filled left to right. The partly filled cell fills from the
-/// bottom, like a battery icon.
-struct SegmentedBattery: View {
+/// One battery lying on its side, filled left to right, with a terminal nub.
+struct SideBattery: View {
     let percent: Int
-    var segments = 5
+    var tint: Color = .green
 
     var body: some View {
-        let perCell = 100.0 / Double(segments)
-        HStack(spacing: 5) {
-            ForEach(0..<segments, id: \.self) { index in
-                let fill = min(1, max(0, (Double(percent) - Double(index) * perCell) / perCell))
-                ZStack(alignment: .bottom) {
-                    RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08))
-                    GeometryReader { proxy in
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.green.gradient)
-                            .frame(height: proxy.size.height * fill)
-                            .frame(maxHeight: .infinity, alignment: .bottom)
-                    }
+        let fraction = Double(max(0, min(percent, 100))) / 100
+        HStack(spacing: 3) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 10).fill(.white.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(tint.gradient)
+                        .frame(width: max(14, (proxy.size.width - 10) * fraction))
+                        .padding(5)
+                        .shadow(color: tint.opacity(0.4), radius: 6)
                 }
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.45), lineWidth: 2))
             }
+            RoundedRectangle(cornerRadius: 2)
+                .fill(tint.opacity(0.45))
+                .frame(width: 5)
+                .padding(.vertical, 12)
         }
-        .padding(5)
-        .background(Color.green.opacity(0.18), in: .rect(cornerRadius: 10))
     }
 }
 

@@ -57,9 +57,11 @@ public struct ChargeSession: Equatable, Sendable {
 
     public var isMeasured: Bool { measuredSecondsPerPercent != nil }
 
-    /// The board reads 100% but the charger is still putting power in.
-    public static func isToppingOff(percent: Int?, watts: Double?) -> Bool {
-        (percent ?? 0) >= 99 && (watts ?? 0) > 5
+    /// Past the jump the board reads 99-100% while the charger tapers.
+    /// Charge power gets small and noisy there, so the percentage alone
+    /// decides; the charging bit says whether the charger is still on.
+    public static func isToppingOff(percent: Int?, watts: Double? = nil) -> Bool {
+        (percent ?? 0) >= jumpPercent
     }
 
     /// Average charge power over the session.
@@ -70,7 +72,7 @@ public struct ChargeSession: Equatable, Sendable {
     }
 
     public func secondsToFull(packWattHours: Double) -> TimeInterval? {
-        guard let percent = latestPercent, percent < 100 else { return latestPercent == 100 ? 0 : nil }
+        guard let percent = latestPercent, percent < Self.jumpPercent else { return nil }
         let perPercent: Double
         if let measured = measuredSecondsPerPercent {
             perPercent = measured

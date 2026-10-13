@@ -133,6 +133,12 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(t.status?.riderDetected == false)
         t.apply(.statusError, data: WireValue.encode(0x2000))
         #expect(t.status?.charging == true)
+        #expect(t.status?.error == nil)
+        // Seen while charging on its side: charging flag plus error 4.
+        t.apply(.statusError, data: WireValue.encode(0x2004))
+        #expect(t.status?.charging == true)
+        #expect(t.status?.error?.title == "Start in the ready position")
+        #expect(BoardErrorCode(code: 99).title == "Error 99")
         #expect(t.status?.faults.isEmpty == true)
     }
 
@@ -189,8 +195,12 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
 
     @Test func toppingOff() {
         #expect(ChargeSession.isToppingOff(percent: 100, watts: 86))
-        #expect(!ChargeSession.isToppingOff(percent: 100, watts: 0))
+        // Low, noisy power at the end must not flip it back.
+        #expect(ChargeSession.isToppingOff(percent: 100, watts: 0))
         #expect(!ChargeSession.isToppingOff(percent: 80, watts: 190))
+        var session = ChargeSession()
+        session.record(percent: 100, watts: 20)
+        #expect(session.secondsToFull(packWattHours: 139) == nil)
     }
 
     @Test func voltageFromChargeCounters() throws {

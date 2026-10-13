@@ -88,7 +88,7 @@ The official app switches decoding when `q3.c.h(fw, hw)` is true: Pint >= 5056, 
 
 Measured on the 5208 Pint while pressing pads, tilting and spinning (`/tmp/owwatch.py`), then checked against the official app and other projects.
 
-**`30f` status** is a bitmask in the high byte. ponewheel's `DeviceStatus` documents the layout and the official app tests the same bits (`b2.f`: `& 256`, `& 512`, `& 1024`):
+**`30f` status**: the high byte is a bitmask and the low byte is the current error code (the official app decodes `bArr[1]` with `b2.m`). ponewheel's `DeviceStatus` documents the layout and the official app tests the same bits (`b2.f`: `& 256`, `& 512`, `& 1024`):
 
 | Bit (u16) | Meaning | Seen on 5208 |
 | --- | --- | --- |
@@ -102,6 +102,8 @@ Measured on the 5208 Pint while pressing pads, tilting and spinning (`/tmp/owwat
 | `0x8000` | broken capacitor | |
 
 floatface (Garmin GT app) saw the same footpad behaviour but hadn't mapped the bits.
+
+Error codes in the low byte, with the official app's meaning: 1 BMS low battery, 2 voltage low, 3 voltage high, 4 fall detected (powered on while not level; seen as `2004` while charging on its side), 5 pickup detected, 6 overcurrent, 7 over temperature, 8 battery temperature (old), 9 bad accelerometer, 10 bad current sensor, 11 bad hall sensors, 12 bad motor, 13 and 14 overcurrent, 15 rider detect zone pressed at startup (throttle on Antic), 16 communications, 17 battery temperature, 18 motor temperature, 19 controller over voltage, 20 disabled, 21 charger connected, 22 BMS serial mismatch (new battery), 23 incompatible hardware, 25 new controller. ponewheel lists 1 to 15 with the same meanings.
 
 **`31c` is a multiplexed diagnostic stream, not just "last error code".** Each notification is `register << 8 | value`, and the board cycles through about 50 registers continuously (it also explains why ZWheel saw it "emitting a status bitmask"). The official app collects one full loop (`z1.c`) and decodes:
 
@@ -124,7 +126,7 @@ floatface (Garmin GT app) saw the same footpad behaviour but hadn't mapped the b
 
 - **Charging counts as regen.** `314` (trip regen amp-hours) rises at the charge current, 0.18 mAh per unit. So `304` over the rate of `314` gives pack voltage: 59.6 V at 57%, rising to 63.5 V where constant voltage starts. That is 4.2 V per cell on the 15s pack. The same works while riding with `313`, so voltage is recoverable on firmware that reports 0 on `316`.
 - **The percentage is a voltage-based estimate.** It snaps to 100% at the start of the taper. The 31 points from 57% to 88% took 0.26 Ah per 11 points, about 2.4 Ah per 100%, which fits the VTC5D 15s1p pack (2.8 Ah nominal).
-- **`30f` also sets `0x0004` while charging.** Its meaning is unknown.
+- **`30f` read `2004` while charging:** the charging flag plus error 4, because the board was on its side.
 - **The battery cycle count (`31c` register `f1`) went from 1 to 2** across this charge.
 - **`31d`, `31f` and `320`** stayed at `0000`, `0000` and `0004` throughout.
 

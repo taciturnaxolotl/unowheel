@@ -139,15 +139,17 @@ private struct ChargingBody: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
-            ArcGauge(fraction: Double(state.batteryPercent) / 100, tint: .green, lineWidth: 9) {
-                VStack(spacing: -2) {
-                    Text("\(state.batteryPercent)")
-                        .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+            VStack(spacing: 6) {
+                HStack(spacing: 3) {
+                    Image(systemName: "bolt.fill").foregroundStyle(.green)
+                    Text("\(state.batteryPercent)%")
+                        .monospacedDigit()
                         .contentTransition(.numericText())
-                    Image(systemName: "bolt.fill").font(.caption2).foregroundStyle(.green)
                 }
+                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                SideBattery(percent: state.batteryPercent)
+                    .frame(width: 104, height: 40)
             }
-            .frame(width: 96, height: 96)
             VStack(alignment: .leading, spacing: 4) {
                 if state.toppingOff {
                     Text("Topping off").font(.title2.weight(.semibold))
