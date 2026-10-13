@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct UnoWheelApp: App {
     @State private var connection = BoardConnection()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +14,13 @@ struct UnoWheelApp: App {
                     if CommandLine.arguments.contains("-demo") { connection.loadDemo() }
                 }
                 #endif
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .active: connection.appBecameActive()
+                    case .background: connection.appEnteredBackground()
+                    default: break
+                    }
+                }
         }
     }
 }
