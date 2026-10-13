@@ -75,6 +75,30 @@ Decompiled `com.rideonewheel.onewheel` 2.6.85 with jadx. The handshake lives in 
 - The board-specific secret therefore lives only on Future Motion's server and in the board's firmware. The app cannot derive it, so neither can we from the APK. Deriving it offline needs a firmware dump and a look at the board's check routine, for example with rewheel's STM32 dump procedure.
 - There is a separate RSA flow on `31f` (`RsaException.BoardRsaSeedRetrievalFailed`, `ServerRsaKeyRetrievalFailed`, `BoardRsaUnlockFailed`). It belongs to the owner-portal "lock board" commands, not the connect handshake.
 
+## Telemetry changes on newer firmware
+
+The official app switches decoding when `q3.c.h(fw, hw)` is true: Pint >= 5056, Pint X >= 5076, XR >= 4153, GT >= 6000, and always on GT-S, XR Classic and Antic. Measured on the 5208 Pint:
+
+- **`31b` (cell voltages) is silent.** No notifications in 15 s with notify enabled, and reads return `0000`. The official app only subscribes to `31b` on older firmware, so it doesn't show cells on these boards either.
+- **`312` (current) reads 0.** The app ignores it.
+- **`304` now carries signed motor power in watts.** It used to be the "battery low 5%" flag. Idle it flickers between `0000` and `0003`; the app treats values beyond +/-10 W as real load and negative values as regen.
+- **`31e`** notifies constantly with small values (`0200`, `0301`, `0000`, `0100`), probably a status or step counter. Unknown.
+- **`31c`** reads `4700`, **`320`** reads `0004`, **`31d`** and **`31f`** read 0. Unknown.
+
+## Ride modes and names
+
+Ride mode is the value of `302`. Values by board, from the official app's table (`o3.a.T`):
+
+| Board | Modes |
+| --- | --- |
+| Pint, Pint X | Redwood 5, Pacific 6, Elevated 7, Skyline 8 (Pint X adds an "X" suffix) |
+| GT, GT-S | Bay 3, Roam 4, Flow 5, Highline 6, Elevated 7, Apex 8 |
+| XR Classic | Sequoia 3, Cruz 4, Mission 5, Session 6, Elevated 7, Delirium 8 |
+| Plus, XR | Sequoia 4, Cruz 5, Mission 6, Elevated 7, Delirium 8, Custom 9 |
+| V1 | Classic 1, Extreme 2, Elevated 3 |
+
+The board's nickname is not stored on the board. Renaming it in the official app writes nothing over BLE (the rename capture has no such write, and the app never touches `3fd`). The board still advertises `ow292642`, and the nickname lives in the official app and your Future Motion account. UnoWheel keeps its own nickname per board.
+
 ## Replay
 
 The challenge is fixed per board and the board accepts the same response every time, so one captured response unlocks it indefinitely. No server is involved after that first capture. `tools/ow_unlock.py` caches responses in `~/.config/unowheel/handshakes.json`, keyed by challenge.
