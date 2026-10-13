@@ -1,0 +1,531 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */; };
+		1DBF9680D7DB454EBDB042E1 /* UnlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D6FFB153009A78C10A5037 /* UnlockView.swift */; };
+		5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */; };
+		5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C9A433C252BB5503D037ED /* BatteryWidget.swift */; };
+		6025C73120A6FEF4F83685A6 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
+		6DA052936291834EFF123F23 /* UnoWheelWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7B35FBEB8E33EE81FF8DD05F /* OnewheelKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF99CDA47937E74370783800 /* OnewheelKit */; };
+		8CBAE7CC81CB7602F2844780 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
+		95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FAB40A1A7E79280B636C47 /* BoardView.swift */; };
+		9F1D975C104D557EE8FD77D0 /* RideLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */; };
+		ABBA1D2E6D2338A90F278298 /* UnlockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */; };
+		BE04CF21B48CE8EE3B9E77E4 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1A24D60E710982DA6A0D80 /* ScannerView.swift */; };
+		D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */; };
+		DA0DD611EEEEB27EA092DF61 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 44C36F41820D5863016AC6E8 /* Assets.xcassets */; };
+		E27A174A241ACCB0E3E14100 /* Waiters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */; };
+		F7E371F4E82070BCAB0AE6EC /* UnoWheelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97828C944F6A976A2DF82772 /* UnoWheelApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		07807FC302EC94EEBFC7F449 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 853B6D10A865E0C2A5449D41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1658BD14F4CDAC5FB517555;
+			remoteInfo = UnoWheelWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		14FA3DD63E8DA273ECD7ED59 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6DA052936291834EFF123F23 /* UnoWheelWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0364371C96C897D459F19C13 /* OnewheelKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OnewheelKit; path = ../OnewheelKit; sourceTree = SOURCE_ROOT; };
+		09FAB40A1A7E79280B636C47 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
+		0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Waiters.swift; sourceTree = "<group>"; };
+		1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelWidgets.swift; sourceTree = "<group>"; };
+		13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideLiveActivity.swift; sourceTree = "<group>"; };
+		3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = UnoWheelWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D1A24D60E710982DA6A0D80 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
+		3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockStore.swift; sourceTree = "<group>"; };
+		44C36F41820D5863016AC6E8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
+		5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMirror.swift; sourceTree = "<group>"; };
+		61504825A1F3396112873106 /* UnoWheel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = UnoWheel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		97828C944F6A976A2DF82772 /* UnoWheelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelApp.swift; sourceTree = "<group>"; };
+		A1C9A433C252BB5503D037ED /* BatteryWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
+		EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardConnection.swift; sourceTree = "<group>"; };
+		F3D6FFB153009A78C10A5037 /* UnlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		797BFD532573E3541995110D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B35FBEB8E33EE81FF8DD05F /* OnewheelKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		28BC76CE2780425362A153B9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				61504825A1F3396112873106 /* UnoWheel.app */,
+				3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9AD820F402602D549F027CF6 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B802F447ED5FD1DE309580A1 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				0364371C96C897D459F19C13 /* OnewheelKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		D1C08381444903250A983873 /* UnoWheel */ = {
+			isa = PBXGroup;
+			children = (
+				44C36F41820D5863016AC6E8 /* Assets.xcassets */,
+				EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */,
+				09FAB40A1A7E79280B636C47 /* BoardView.swift */,
+				5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */,
+				3D1A24D60E710982DA6A0D80 /* ScannerView.swift */,
+				3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */,
+				F3D6FFB153009A78C10A5037 /* UnlockView.swift */,
+				97828C944F6A976A2DF82772 /* UnoWheelApp.swift */,
+				0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */,
+			);
+			path = UnoWheel;
+			sourceTree = "<group>";
+		};
+		DB34DC354FA1F6819853A0D7 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				A1C9A433C252BB5503D037ED /* BatteryWidget.swift */,
+				13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */,
+				1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		EDCC804B050A685E0690CCEC = {
+			isa = PBXGroup;
+			children = (
+				B802F447ED5FD1DE309580A1 /* Packages */,
+				9AD820F402602D549F027CF6 /* Shared */,
+				D1C08381444903250A983873 /* UnoWheel */,
+				DB34DC354FA1F6819853A0D7 /* Widgets */,
+				28BC76CE2780425362A153B9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		27546CA0EAAA3DE262CD0763 /* UnoWheel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 57684180F1162FCFF07A8220 /* Build configuration list for PBXNativeTarget "UnoWheel" */;
+			buildPhases = (
+				E25C224C39EB9364B76BB3E2 /* Sources */,
+				E5C6E1B82F157DC576D04321 /* Resources */,
+				797BFD532573E3541995110D /* Frameworks */,
+				14FA3DD63E8DA273ECD7ED59 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A08AD8CAFF4EDF66EDA71D80 /* PBXTargetDependency */,
+			);
+			name = UnoWheel;
+			packageProductDependencies = (
+				BF99CDA47937E74370783800 /* OnewheelKit */,
+			);
+			productName = UnoWheel;
+			productReference = 61504825A1F3396112873106 /* UnoWheel.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1658BD14F4CDAC5FB517555 /* UnoWheelWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6E41A6C5DF1FBA616EB38B90 /* Build configuration list for PBXNativeTarget "UnoWheelWidgets" */;
+			buildPhases = (
+				A504A35CF8CDD78416DA548B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = UnoWheelWidgets;
+			packageProductDependencies = (
+			);
+			productName = UnoWheelWidgets;
+			productReference = 3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		853B6D10A865E0C2A5449D41 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					27546CA0EAAA3DE262CD0763 = {
+						DevelopmentTeam = M67B42LX8D;
+						ProvisioningStyle = Automatic;
+					};
+					E1658BD14F4CDAC5FB517555 = {
+						DevelopmentTeam = M67B42LX8D;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 954DECC0E559548EF78382B1 /* Build configuration list for PBXProject "UnoWheel" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EDCC804B050A685E0690CCEC;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B0B8538787BB121CB05C6234 /* XCLocalSwiftPackageReference "../OnewheelKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 28BC76CE2780425362A153B9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				27546CA0EAAA3DE262CD0763 /* UnoWheel */,
+				E1658BD14F4CDAC5FB517555 /* UnoWheelWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E5C6E1B82F157DC576D04321 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA0DD611EEEEB27EA092DF61 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A504A35CF8CDD78416DA548B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */,
+				9F1D975C104D557EE8FD77D0 /* RideLiveActivity.swift in Sources */,
+				8CBAE7CC81CB7602F2844780 /* SharedModels.swift in Sources */,
+				5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E25C224C39EB9364B76BB3E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */,
+				95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */,
+				0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */,
+				BE04CF21B48CE8EE3B9E77E4 /* ScannerView.swift in Sources */,
+				6025C73120A6FEF4F83685A6 /* SharedModels.swift in Sources */,
+				ABBA1D2E6D2338A90F278298 /* UnlockStore.swift in Sources */,
+				1DBF9680D7DB454EBDB042E1 /* UnlockView.swift in Sources */,
+				F7E371F4E82070BCAB0AE6EC /* UnoWheelApp.swift in Sources */,
+				E27A174A241ACCB0E3E14100 /* Waiters.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A08AD8CAFF4EDF66EDA71D80 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1658BD14F4CDAC5FB517555 /* UnoWheelWidgets */;
+			targetProxy = 07807FC302EC94EEBFC7F449 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0AC78FC6986F20D315FA84CE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = UnoWheel/UnoWheel.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UnoWheel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = UnoWheel;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "UnoWheel talks to your Onewheel over Bluetooth to unlock it and show live ride data.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sh.dunkirk.unowheel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		0E7A65457767CE71DF731374 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = M67B42LX8D;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		9B161D52A3219ED899116D18 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widgets/UnoWheelWidgets.entitlements;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sh.dunkirk.unowheel.widgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		BD84740E62074BD7F046508A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = UnoWheel/UnoWheel.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UnoWheel/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = UnoWheel;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "UnoWheel talks to your Onewheel over Bluetooth to unlock it and show live ride data.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sh.dunkirk.unowheel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		DA7E50FB87F22AD9A8AB17D1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widgets/UnoWheelWidgets.entitlements;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sh.dunkirk.unowheel.widgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		DAB752327EC334A763CDC9F6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = M67B42LX8D;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		57684180F1162FCFF07A8220 /* Build configuration list for PBXNativeTarget "UnoWheel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BD84740E62074BD7F046508A /* Debug */,
+				0AC78FC6986F20D315FA84CE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6E41A6C5DF1FBA616EB38B90 /* Build configuration list for PBXNativeTarget "UnoWheelWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA7E50FB87F22AD9A8AB17D1 /* Debug */,
+				9B161D52A3219ED899116D18 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		954DECC0E559548EF78382B1 /* Build configuration list for PBXProject "UnoWheel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0E7A65457767CE71DF731374 /* Debug */,
+				DAB752327EC334A763CDC9F6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B0B8538787BB121CB05C6234 /* XCLocalSwiftPackageReference "../OnewheelKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../OnewheelKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BF99CDA47937E74370783800 /* OnewheelKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OnewheelKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 853B6D10A865E0C2A5449D41 /* Project object */;
+}

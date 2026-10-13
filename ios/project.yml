@@ -1,0 +1,65 @@
+name: UnoWheel
+options:
+  bundleIdPrefix: sh.dunkirk
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  OnewheelKit:
+    path: ../OnewheelKit
+settings:
+  base:
+    DEVELOPMENT_TEAM: M67B42LX8D
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  UnoWheel:
+    type: application
+    platform: iOS
+    sources:
+      - path: UnoWheel
+        excludes:
+          - Info.plist
+          - UnoWheel.entitlements
+      - Shared
+    dependencies:
+      - package: OnewheelKit
+      - target: UnoWheelWidgets
+    entitlements:
+      path: UnoWheel/UnoWheel.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.sh.dunkirk.unowheel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sh.dunkirk.unowheel
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: UnoWheel/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: UnoWheel
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: UnoWheel talks to your Onewheel over Bluetooth to unlock it and show live ride data.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  UnoWheelWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+        excludes:
+          - Info.plist
+          - UnoWheelWidgets.entitlements
+      - Shared
+    entitlements:
+      path: Widgets/UnoWheelWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.sh.dunkirk.unowheel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sh.dunkirk.unowheel.widgets
+        INFOPLIST_FILE: Widgets/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
