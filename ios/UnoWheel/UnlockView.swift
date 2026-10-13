@@ -15,12 +15,12 @@ struct UnlockView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("This board's firmware only accepts a response issued by Future Motion's server. The official app saves it the first time it connects. Grab it once and UnoWheel keeps it in your Keychain; the board's challenge never changes, so it works forever.")
+                    Text("This board needs an unlock code from the official Onewheel app.")
                         .font(.callout)
                 }
 
                 if let challenge = connection.challenge {
-                    Section("Board challenge") {
+                    Section("Challenge") {
                         Text(challenge.bytes.spacedHex)
                             .font(.callout.monospaced())
                             .textSelection(.enabled)
@@ -29,7 +29,7 @@ struct UnlockView: View {
                 }
 
                 Section {
-                    Button("Import PacketLogger capture", systemImage: "doc.badge.arrow.up") { importing = true }
+                    Button("Import capture (.pklg)", systemImage: "doc.badge.arrow.up") { importing = true }
                     ForEach(candidates, id: \.self) { candidate in
                         Button {
                             submit(candidate)
@@ -37,18 +37,18 @@ struct UnlockView: View {
                             VStack(alignment: .leading) {
                                 Text(candidate.spacedHex).font(.caption.monospaced())
                                 if let challenge = connection.challenge, Handshake.isPlausibleResponse(candidate, for: challenge) {
-                                    Text("Matches this board").font(.caption2).foregroundStyle(.green)
+                                    Text("Matches").font(.caption2).foregroundStyle(.green)
                                 }
                             }
                         }
                     }
                 } header: {
-                    Text("From a capture")
+                    Text("Capture")
                 } footer: {
-                    Text("Record the official app connecting with the iOS Bluetooth logging profile and PacketLogger, then open the .pklg here.")
+                    Text("Record the official app connecting with PacketLogger.")
                 }
 
-                Section("Paste a response") {
+                Section("Paste code") {
                     TextField("40 hex characters", text: $pasted, axis: .vertical)
                         .font(.callout.monospaced())
                         .textInputAutocapitalization(.never)
@@ -87,7 +87,7 @@ struct UnlockView: View {
             let findings = PacketLoggerCapture.findings(in: try Data(contentsOf: url))
             candidates = findings.responses
             if candidates.isEmpty {
-                error = "No unlock response in that capture. Make sure it covers the official app connecting."
+                error = "No unlock code in this capture."
             } else if candidates.count == 1 {
                 submit(candidates[0])
             }

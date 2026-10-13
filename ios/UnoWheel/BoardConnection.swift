@@ -22,10 +22,10 @@ enum BoardError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConnected: "Not connected to a board."
-        case .missingCharacteristic(let c): "The board has no \(c.rawValue) characteristic."
+        case .missingCharacteristic(let c): "Missing characteristic \(c.rawValue)."
         case .timeout(let what): "Timed out waiting for \(what)."
         case .bluetooth(let message): message
-        case .rejected: "The board didn't accept that unlock response."
+        case .rejected: "The board rejected this unlock code."
         }
     }
 }
@@ -49,6 +49,18 @@ final class BoardConnection: NSObject {
 
     private(set) var phase: Phase = .idle
     private(set) var discovered: [DiscoveredBoard] = []
+
+    var isWaiting: Bool {
+        if case .waiting = phase { return true }
+        return false
+    }
+
+    /// Boards to offer in the list. The one we're already waiting for is
+    /// shown in its own banner, so leave it out here.
+    var nearby: [DiscoveredBoard] {
+        guard case .waiting = phase, let waitingID = peripheral?.identifier else { return discovered }
+        return discovered.filter { $0.id != waitingID }
+    }
     private(set) var boardName: String?
     private(set) var nickname: String?
 
@@ -158,6 +170,9 @@ final class BoardConnection: NSObject {
         t.apply(.tripOdometer, data: WireValue.encode(2100))
         t.apply(.lifetimeOdometer, data: WireValue.encode(412))
         t.apply(.pitch, data: WireValue.encode(1776))
+        for word: UInt16 in [0x2008, 0xc006, 0xf000, 0xf101, 0xf264, 0xd000, 0xd113, 0xd29c, 0xd3d4] {
+            t.apply(.lastErrorCode, data: WireValue.encode(word))
+        }
         telemetry = t
         unlockedAt = .now.addingTimeInterval(-600)
         phase = .unlocked
@@ -234,7 +249,7 @@ final class BoardConnection: NSObject {
 
     func connect(_ board: DiscoveredBoard) {
         guard let target = central.retrievePeripherals(withIdentifiers: [board.id]).first else {
-            phase = .failed("Lost track of \(board.name). Scan again.")
+            phase = .failed("Lost \(board.name). Scan again.")
             return
         }
         central.stopScan()
@@ -299,6 +314,14 @@ final class BoardConnection: NSObject {
                 return
             }
 
+            // A saved code works without asking for a challenge first (the
+            // official app does this too), which saves a round trip.
+            if strategy == .serverIssued, let name = boardName, let saved = UnlockStore.response(for: name, challenge: nil) {
+                record("using saved code")
+                if (try? await submit(saved, remember: false)) != nil { return }
+                record("saved code rejected, asking for a challenge")
+            }
+
             let challenge = try await requestChallenge(firmware: fw)
             self.challenge = challenge
             record("challenge \(challenge.bytes.spacedHex)")
@@ -328,9 +351,12 @@ final class BoardConnection: NSObject {
         phase = .handshaking
         do {
             try await write(.uartWrite, response, withResponse: true)
-            try await Task.sleep(for: .milliseconds(600))
-            telemetry.apply(.rideMode, data: try await read(.rideMode))
-            telemetry.apply(.batteryPercent, data: try await read(.batteryPercent))
+            // The board usually unlocks within one read; give it about a second.
+            for attempt in 0..<8 {
+                telemetry.apply(.batteryPercent, data: try await read(.batteryPercent))
+                if telemetry.looksUnlocked { break }
+                if attempt < 7 { try await Task.sleep(for: .milliseconds(120)) }
+            }
             guard telemetry.looksUnlocked else {
                 phase = .needsResponse
                 throw BoardError.rejected
@@ -348,7 +374,7 @@ final class BoardConnection: NSObject {
 
     func submitPasted(_ text: String) async throws {
         guard let data = Handshake.parseHex(text), data.count == Handshake.frameLength else {
-            throw BoardError.bluetooth("A response is 20 bytes, 40 hex characters.")
+            throw BoardError.bluetooth("An unlock code is 40 hex characters.")
         }
         try await submit(data)
     }
@@ -367,10 +393,24 @@ final class BoardConnection: NSObject {
         unlockedAt = .now
         record("unlocked")
         startKeepAlive()
-        for characteristic in Characteristic.telemetry where characteristics[characteristic] != nil {
-            if let data = try? await read(characteristic) { telemetry.apply(characteristic, data: data) }
-            try? await setNotify(characteristic, true)
+        // GATT requests go out one at a time, so ask for what the dashboard
+        // shows first, all at once, then the rest.
+        let first: [Characteristic] = [.batteryPercent, .rpm, .rideMode, .batteryLow5, .lightingMode, .statusError]
+        let rest = Characteristic.telemetry.filter { !first.contains($0) }
+        await subscribe(first)
+        await subscribe(rest)
+    }
+
+    private func subscribe(_ list: [Characteristic]) async {
+        let tasks = list.filter { characteristics[$0] != nil }.map { characteristic in
+            Task { @MainActor [weak self] in
+                try? await self?.setNotify(characteristic, true)
+                if let data = try? await self?.read(characteristic) {
+                    self?.telemetry.apply(characteristic, data: data)
+                }
+            }
         }
+        for task in tasks { await task.value }
     }
 
     private func startKeepAlive() {
@@ -493,6 +533,8 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
             }
         case .poweredOff, .unauthorized, .unsupported:
             teardown()
+            peripheral = nil
+            mirror.finish()
             phase = .bluetoothOff
         default:
             break
@@ -549,7 +591,7 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
         if autoConnect, !autoConnectPaused {
             armAutoConnect()
         } else {
-            phase = .failed("The board disconnected.")
+            phase = .failed("Board disconnected.")
         }
     }
 }
@@ -563,7 +605,7 @@ extension BoardConnection: @preconcurrency CBPeripheralDelegate {
             return
         }
         guard let service = peripheral.services?.first(where: { $0.uuid == CBUUID(string: Characteristic.serviceUUIDString) }) else {
-            discoveryWaiters.resumeFirst(.failure(BoardError.bluetooth("This doesn't look like a Onewheel.")))
+            discoveryWaiters.resumeFirst(.failure(BoardError.bluetooth("Not a Onewheel.")))
             return
         }
         peripheral.discoverCharacteristics(nil, for: service)

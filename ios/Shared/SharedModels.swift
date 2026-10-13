@@ -15,6 +15,7 @@ struct BoardSnapshot: Codable, Equatable {
     var rideMode: String?
     var lifetime: String?
     var range: String?
+    var charging: Bool? = nil
     var connected: Bool
     var updatedAt: Date
 
@@ -38,13 +39,14 @@ struct BoardSnapshot: Codable, Equatable {
 }
 
 enum RideState: String, Codable, Hashable {
-    case riding, braking, stopped
+    case riding, braking, stopped, charging
 
     var label: String {
         switch self {
         case .riding: "Riding"
         case .braking: "Regen"
         case .stopped: "Stopped"
+        case .charging: "Charging"
         }
     }
 
@@ -53,6 +55,7 @@ enum RideState: String, Codable, Hashable {
         case .riding: "figure.skateboarding"
         case .braking: "arrow.uturn.backward"
         case .stopped: "pause.circle"
+        case .charging: "bolt.fill"
         }
     }
 }

@@ -13,6 +13,16 @@ final class RideMirror {
     private var lastWidgetReload = Date.distantPast
     private var topSpeed = 0
 
+    init() {
+        // A crash or force-quit can leave an activity behind; nothing will
+        // ever update it again, so clear it out on launch.
+        Task {
+            for leftover in Activity<RideAttributes>.activities {
+                await leftover.end(nil, dismissalPolicy: .immediate)
+            }
+        }
+    }
+
     private var useMetric: Bool {
         UserDefaults.standard.object(forKey: "useMetric") as? Bool ?? (Locale.current.measurementSystem == .metric)
     }
@@ -58,6 +68,7 @@ final class RideMirror {
             rideMode: t.rideMode.map(t.model.rideModeName) ?? previous?.rideMode,
             lifetime: t.lifetimeMiles.map { useMetric ? "\(Int(Double($0) * 1.60934)) km" : "\($0) mi" } ?? previous?.lifetime,
             range: range ?? previous?.range,
+            charging: t.status.map(\.charging) ?? previous?.charging,
             connected: connected,
             updatedAt: previous?.updatedAt ?? .now
         )
@@ -83,7 +94,8 @@ final class RideMirror {
         let metric = useMetric
         let speed = Int((metric ? t.speedKPH : t.speedMPH)?.rounded() ?? 0)
         topSpeed = max(topSpeed, speed)
-        let rideState: RideState = speed < 1 ? .stopped : t.isRegenerating ? .braking : .riding
+        let rideState: RideState = t.status?.charging == true ? .charging
+            : speed < 1 ? .stopped : t.isRegenerating ? .braking : .riding
         let state = RideAttributes.ContentState(
             speed: speed,
             unit: metric ? "km/h" : "mph",

@@ -62,6 +62,7 @@ func stateColor(_ state: RideState) -> Color {
     case .riding: .orange
     case .braking: .green
     case .stopped: .secondary
+    case .charging: .green
     }
 }
 
@@ -87,7 +88,7 @@ private struct LockScreenRide: View {
                         Text("\(state.range) left")
                             .font(.callout.weight(.medium).monospacedDigit())
                         if !state.rangeLearned {
-                            Text("rated, still learning")
+                            Text("rated")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }

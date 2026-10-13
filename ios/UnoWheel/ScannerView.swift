@@ -8,7 +8,7 @@ struct ScannerView: View {
             switch connection.phase {
             case .bluetoothOff:
                 ContentUnavailableView("Bluetooth is off", systemImage: "antenna.radiowaves.left.and.right.slash",
-                                       description: Text("Turn on Bluetooth and allow UnoWheel to use it."))
+                                       description: Text("Turn on Bluetooth to find your board."))
             case .failed(let message):
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -23,28 +23,28 @@ struct ScannerView: View {
                             .symbolEffect(.variableColor.iterative, options: .repeating)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Waiting for \(KnownBoards.displayName(for: name))").font(.headline)
-                            Text("Turn it on and UnoWheel connects by itself, even from your pocket.")
+                            Text("Connects when the board turns on.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
                     }
-                    Button("Stop waiting", role: .cancel) { connection.cancelWaiting() }
+                    Button("Cancel", role: .cancel) { connection.cancelWaiting() }
                 }
             default:
                 EmptyView()
             }
 
             Section {
-                if connection.discovered.isEmpty && connection.phase != .bluetoothOff {
+                if connection.nearby.isEmpty && connection.phase != .bluetoothOff && !connection.isWaiting {
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Looking for boards. Make sure yours is on and the official app is closed.")
+                        Text("Searching")
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
                 }
-                ForEach(connection.discovered) { board in
+                ForEach(connection.nearby) { board in
                     Button {
                         connection.connect(board)
                     } label: {
@@ -55,7 +55,7 @@ struct ScannerView: View {
                             VStack(alignment: .leading) {
                                 Text(board.displayName).font(.headline)
                                 Text(board.displayName == board.name
-                                     ? (board.known ? "Paired before" : "New board")
+                                     ? (board.known ? "Known" : "New")
                                      : board.name)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -71,7 +71,7 @@ struct ScannerView: View {
             } header: {
                 Text("Nearby")
             } footer: {
-                Text("A board talks to one phone at a time, so it won't show up here while another app is connected.")
+                Text("Not listed? Close the Onewheel app. A board connects to one phone at a time.")
             }
         }
         .navigationTitle("UnoWheel")

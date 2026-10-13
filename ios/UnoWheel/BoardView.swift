@@ -15,10 +15,12 @@ struct BoardView: View {
             VStack(spacing: 20) {
                 status
                 if connection.phase == .unlocked {
+                    if let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
                     speedAndBattery
                     controls
                     statsGrid
                     if t.reportsCellVoltages { cells }
+                    if !t.battery.isEmpty { batteryCard }
                 }
             }
             .padding()
@@ -48,7 +50,7 @@ struct BoardView: View {
                         }
                     }
                     Button("Connection log", systemImage: "text.alignleft") { showingLog = true }
-                    Button("Forget unlock response", systemImage: "key.slash", role: .destructive) {
+                    Button("Forget unlock code", systemImage: "key.slash", role: .destructive) {
                         connection.forgetResponse()
                     }
                 } label: {
@@ -68,7 +70,7 @@ struct BoardView: View {
             Button("Save") { connection.rename(to: draftName) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Shown in UnoWheel, the widgets and the Live Activity. Leave it empty to use \(connection.boardName ?? "the serial").")
+            Text("Leave empty to use the serial number.")
         }
     }
 
@@ -79,7 +81,7 @@ struct BoardView: View {
         case .handshaking:
             ProgressRow(text: "Unlocking")
         case .needsResponse:
-            Label("Waiting for an unlock response", systemImage: "lock.fill")
+            Label("Locked", systemImage: "lock.fill")
                 .foregroundStyle(.secondary)
         default:
             HStack {
@@ -109,7 +111,14 @@ struct BoardView: View {
                 BatteryRing(percent: t.batteryPercent ?? 0, tint: batteryTint)
                     .frame(width: 112, height: 112)
             }
-            if let km = connection.rangeKm {
+            if t.status?.charging == true {
+                Divider()
+                Label("Charging", systemImage: "bolt.fill")
+                    .font(.headline)
+                    .foregroundStyle(.green)
+                    .symbolEffect(.pulse, options: .repeating)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let km = connection.rangeKm {
                 Divider()
                 HStack(alignment: .firstTextBaseline) {
                     Label {
@@ -121,12 +130,56 @@ struct BoardView: View {
                             .foregroundStyle(.tint)
                     }
                     Spacer()
-                    Text(connection.range.isLearned ? "Based on your riding" : "Rated range")
+                    Text(connection.range.isLearned ? "Learned" : "Rated")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
         }
+        .padding(20)
+        .background(.fill.tertiary, in: .rect(cornerRadius: 24))
+    }
+
+    private func faultBanner(_ faults: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Board fault", systemImage: "exclamationmark.triangle.fill")
+                .font(.headline)
+            ForEach(faults, id: \.self) { Text($0).font(.subheadline) }
+        }
+        .foregroundStyle(.orange)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.orange.opacity(0.15), in: .rect(cornerRadius: 20))
+    }
+
+    private var batteryCard: some View {
+        let b = t.battery
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Battery").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            if let health = b.healthPercent {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(health)%").font(.title2.weight(.semibold).monospacedDigit())
+                    Text("health").foregroundStyle(.secondary)
+                    Spacer()
+                    if let cycles = b.cycles {
+                        Text("\(cycles) cycle\(cycles == 1 ? "" : "s")").font(.headline.monospacedDigit())
+                    }
+                }
+                ProgressView(value: Double(health), total: 100)
+                    .tint(health > 80 ? .green : health > 60 ? .orange : .red)
+            }
+            Divider()
+            if let cells = b.cellType { LabeledContent("Cells", value: cells) }
+            if let id = b.batteryID {
+                LabeledContent("Battery ID") {
+                    Text(verbatim: "\(id) · \(String(id, radix: 16, uppercase: true))")
+                        .monospacedDigit()
+                        .textSelection(.enabled)
+                }
+            }
+            if let boot = b.bootloaderVersion { LabeledContent("Bootloader", value: "\(boot)") }
+        }
+        .font(.subheadline)
         .padding(20)
         .background(.fill.tertiary, in: .rect(cornerRadius: 24))
     }
@@ -166,7 +219,7 @@ struct BoardView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .animation(.default, value: mode)
                     } else {
-                        Text("The board reports mode \(mode), which isn't in UnoWheel's table.")
+                        Text("Unknown mode \(mode)")
                             .font(.footnote)
                             .foregroundStyle(.orange)
                     }

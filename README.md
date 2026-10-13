@@ -37,6 +37,7 @@ Why not sign in with a Future Motion account and fetch the response directly? Th
 ## Riding
 
 - **Auto-connect:** UnoWheel asks iOS to connect to your last board whenever it's in range. The request never expires, so switching the board on with your phone in your pocket is enough. Turn it off from the board screen's menu. Disconnecting by hand pauses it until you pick a board again.
+- **Board health:** a fault banner if the board flags one, a charging state, and a battery card with health, charge cycles, cell type and battery ID (read from the board's diagnostic stream).
 - **Range:** "x mi left" on the dashboard, the widgets and the lock screen. It starts from Future Motion's rated range, then learns how many watt-hours per mile you use (power x time over distance, regen counted at a quarter) and estimates from the energy left in the pack. What it has learned is kept per board.
 
 ## Widgets

@@ -16,10 +16,25 @@ struct BatteryProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BatteryEntry>) -> Void) {
-        let entry = BatteryEntry(date: .now, snapshot: BoardSnapshot.load())
-        // The app reloads timelines when it has news; this just keeps the
-        // "updated" label honest.
-        completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(30 * 60))))
+        let snapshot = BoardSnapshot.load()
+        // One entry per minute for the first hour, then hourly, so the coarse
+        // "5m" / "2h" label stays right without the app having to wake.
+        let now = Date.now
+        var dates = (0..<60).map { now.addingTimeInterval(Double($0) * 60) }
+        dates += (1...12).map { now.addingTimeInterval(Double($0) * 3600) }
+        let entries = dates.map { BatteryEntry(date: $0, snapshot: snapshot) }
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+}
+
+/// "now", "5m", "2h", "3d": how long ago, without the ticking seconds.
+func shortAge(from date: Date, to now: Date) -> String {
+    let seconds = max(0, now.timeIntervalSince(date))
+    switch seconds {
+    case ..<60: return "now"
+    case ..<3600: return "\(Int(seconds / 60))m ago"
+    case ..<86400: return "\(Int(seconds / 3600))h ago"
+    default: return "\(Int(seconds / 86400))d ago"
     }
 }
 
@@ -30,7 +45,7 @@ struct BatteryWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Board battery")
-        .description("Your Onewheel's charge, as of the last time UnoWheel saw it.")
+        .description("Battery level from the last connection.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -59,7 +74,7 @@ struct BatteryWidgetView: View {
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "circle.circle").font(.title)
-                Text("Connect a board in UnoWheel").font(.caption).multilineTextAlignment(.center)
+                Text("No board yet").font(.caption).multilineTextAlignment(.center)
             }
             .foregroundStyle(.secondary)
         }
@@ -85,11 +100,14 @@ struct BatteryWidgetView: View {
 
     private func status(_ snapshot: BoardSnapshot) -> some View {
         Group {
-            if snapshot.connected {
+            if snapshot.connected && snapshot.charging == true {
+                Label("Charging", systemImage: "bolt.fill")
+                    .foregroundStyle(.green)
+            } else if snapshot.connected {
                 Label("Connected", systemImage: "dot.radiowaves.left.and.right")
                     .foregroundStyle(.green)
             } else {
-                Text(snapshot.updatedAt, style: .relative) + Text(" ago")
+                Text(shortAge(from: snapshot.updatedAt, to: entry.date))
             }
         }
         .font(.caption2)
