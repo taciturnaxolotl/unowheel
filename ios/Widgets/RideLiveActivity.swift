@@ -90,56 +90,68 @@ private struct LeadingBadge: View {
 
     var body: some View {
         if state.state == .charging {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.green)
+            ZStack {
+                Circle().fill(Color.green.opacity(0.15))
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 40, weight: .semibold))
+                    .foregroundStyle(.green)
+            }
         } else {
-            // Full scale is the model's top speed; the arc turns red near pushback.
+            // Full scale is the current mode's speed limit; red near pushback.
             let fraction = Double(state.speed) / Double(max(state.speedMax, 1))
             ArcGauge(fraction: fraction, tint: fraction > 0.85 ? .red : .orange, lineWidth: 8) {
                 VStack(spacing: -4) {
                     Text("\(state.speed)")
-                        .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
                         .contentTransition(.numericText())
                     Text(state.unit)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
+            }
+            .overlay(alignment: .bottom) {
+                Text("\(state.speedMax)")
+                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .offset(x: 30, y: -2)
             }
         }
     }
 }
 
-/// Lock screen: the battery as one big bar and the range under it. Speed
-/// only appears while moving.
+/// Lock screen: speed gauge on the left; name, mode, battery and range
+/// stacked against it on the right.
 private struct LockScreenRide: View {
     let context: ActivityViewContext<RideAttributes>
 
     var body: some View {
         let state = context.state
         let charging = state.state == .charging
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(context.attributes.boardName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            HStack(alignment: .center, spacing: 16) {
-                LeadingBadge(state: state)
-                    .frame(width: 92, height: 92)
-                Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 10) {
-                    SideBattery(percent: state.batteryPercent,
-                                tint: charging ? .green : batteryColor(state.batteryPercent),
-                                showsPercent: true)
-                        .frame(width: 160, height: 50)
-                    Text(mainLine(state))
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .contentTransition(.numericText())
+        HStack(spacing: 16) {
+            LeadingBadge(state: state)
+                .frame(width: 96, height: 96)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(context.attributes.boardName)
+                        .font(.headline)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 4)
+                    if !state.rideMode.isEmpty {
+                        Text(state.rideMode)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.white.opacity(0.12), in: .capsule)
+                    }
                 }
+                SideBattery(percent: state.batteryPercent,
+                            tint: charging ? .green : batteryColor(state.batteryPercent),
+                            showsPercent: true)
+                    .frame(height: 40)
+                Label(mainLine(state), systemImage: charging ? "clock.fill" : "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
             }
         }
         .foregroundStyle(.white)
