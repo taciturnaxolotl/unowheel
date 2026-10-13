@@ -97,7 +97,7 @@ Measured on the 5208 Pint while pressing pads, tilting and spinning (`/tmp/owwat
 | `0x0400` | footpad zone 2 | yes, back press; `0x0600` both |
 | `0x0800` | ICSU fault | |
 | `0x1000` | ICSV fault | |
-| `0x2000` | charging | untested |
+| `0x2000` | charging | yes, `30f` reads `2004` on the charger |
 | `0x4000` | BMS/controller comms fault | |
 | `0x8000` | broken capacitor | |
 
@@ -113,6 +113,20 @@ floatface (Garmin GT app) saw the same footpad behaviour but hadn't mapped the b
 | `d0`..`d3` | battery ID, big-endian u32 | `0x00139CD4` = 1285332 |
 | `20` | bootloader version | `08` |
 | everything else | sent verbatim as "Last Error codes" in support reports | `00`..`07`, `a3`, `b0`..`b9`, `ef`, `10`..`17`, `30`, `31`, `f3`, `40`..`48`, `50` |
+
+**A full charge, measured** (ow292642 from 57%, logged every 12 s):
+
+| Phase | What the board reports |
+| --- | --- |
+| Constant current, 57% to 88% | `304` steady at -184 to -198 W. Charge current about 3.1 A. Percentage climbs linearly at about 28 s per point. |
+| Switch to constant voltage, ~88% | Power starts falling. The percentage jumps from 88% to 99% in under 30 s, then reads 100%. |
+| Topping off, at "100%" | Power tapers from ~150 W to ~20 W over 30+ minutes while the board already says 100%. |
+
+- **Charging counts as regen.** `314` (trip regen amp-hours) rises at the charge current, 0.18 mAh per unit. So `304` over the rate of `314` gives pack voltage: 59.6 V at 57%, rising to 63.5 V where constant voltage starts. That is 4.2 V per cell on the 15s pack. The same works while riding with `313`, so voltage is recoverable on firmware that reports 0 on `316`.
+- **The percentage is a voltage-based estimate.** It snaps to 100% at the start of the taper. The 31 points from 57% to 88% took 0.26 Ah per 11 points, about 2.4 Ah per 100%, which fits the VTC5D 15s1p pack (2.8 Ah nominal).
+- **`30f` also sets `0x0004` while charging.** Its meaning is unknown.
+- **The battery cycle count (`31c` register `f1`) went from 1 to 2** across this charge.
+- **`31d`, `31f` and `320`** stayed at `0000`, `0000` and `0004` throughout.
 
 **`31e`** cycles `0100 → 0200 → 0301 → 0000` in lockstep with `31c`, one step per diagnostic register. It behaves like a frame counter for the stream. floatface labels it `custom_shaping`, but nothing here changed with pads, tilt or the wheel.
 

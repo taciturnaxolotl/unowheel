@@ -152,6 +152,73 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
     }
 }
 
+@Suite struct ChargeTests {
+    @Test func chargingIsNotRegen() {
+        var t = Telemetry()
+        t.apply(.hardwareRevision, data: WireValue.encode(5314))
+        t.apply(.firmwareRevision, data: WireValue.encode(5208))
+        // Measured on ow292642 while charging.
+        t.apply(.statusError, data: WireValue.encode(0x2004))
+        t.apply(.batteryLow5, data: WireValue.encode(UInt16(bitPattern: -170)))
+        #expect(t.isCharging)
+        #expect(!t.isRegenerating)
+        #expect(t.chargingWatts == 170)
+    }
+
+    @Test func estimatesFromPowerFirst() throws {
+        var session = ChargeSession(startedAt: .distantPast)
+        session.record(percent: 57, watts: 185, at: .distantPast)
+        let seconds = try #require(session.secondsToFull(packWattHours: 139))
+        // 31 points to the jump at 88%, at 139 Wh / 100 / 185 W each.
+        #expect(abs(seconds - 31 * 1.39 / 185 * 3600) < 1)
+        #expect(!session.isMeasured)
+    }
+
+    @Test func switchesToMeasuredRate() throws {
+        // Real 5208 Pint charge: 57% -> 88% at ~28 s per point.
+        let start = Date(timeIntervalSince1970: 0)
+        var session = ChargeSession(startedAt: start)
+        session.record(percent: 57, watts: 185, at: start)
+        for (i, pct) in (58...70).enumerated() {
+            session.record(percent: pct, watts: 187, at: start.addingTimeInterval(12 + Double(i) * 28))
+        }
+        #expect(session.isMeasured)
+        let seconds = try #require(session.secondsToFull(packWattHours: 139))
+        #expect(abs(seconds - 18 * 28) < 1)
+    }
+
+    @Test func toppingOff() {
+        #expect(ChargeSession.isToppingOff(percent: 100, watts: 86))
+        #expect(!ChargeSession.isToppingOff(percent: 100, watts: 0))
+        #expect(!ChargeSession.isToppingOff(percent: 80, watts: 190))
+    }
+
+    @Test func voltageFromChargeCounters() throws {
+        // 36 s of the real charge at 57%: 184 W and +168 units on 314.
+        var t = Telemetry()
+        t.apply(.hardwareRevision, data: WireValue.encode(5314))
+        t.apply(.firmwareRevision, data: WireValue.encode(5208))
+        t.apply(.statusError, data: WireValue.encode(0x2004))
+        t.apply(.batteryLow5, data: WireValue.encode(UInt16(bitPattern: -184)))
+        t.apply(.tripAmpHours, data: WireValue.encode(0))
+        var estimator = PackVoltageEstimator()
+        let start = Date(timeIntervalSince1970: 0)
+        for second in 0...36 {
+            t.apply(.tripRegenAmpHours, data: WireValue.encode(UInt16(5842 + second * 168 / 36)))
+            estimator.record(t, at: start.addingTimeInterval(Double(second)))
+        }
+        let volts = try #require(estimator.volts)
+        #expect(abs(volts - 60.8) < 0.5)
+    }
+
+    @Test func throttlesSamples() {
+        let start = Date(timeIntervalSince1970: 0)
+        var session = ChargeSession(startedAt: start)
+        for i in 0..<10 { session.record(percent: 50, watts: 170, at: start.addingTimeInterval(Double(i))) }
+        #expect(session.samples.count == 1)
+    }
+}
+
 @Suite struct RangeTests {
     func pint(battery: Int, rpm: Int = 0, watts: Int = 0) -> Telemetry {
         var t = Telemetry()

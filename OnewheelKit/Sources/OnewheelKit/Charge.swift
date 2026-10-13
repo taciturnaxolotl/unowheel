@@ -1,0 +1,84 @@
+import Foundation
+
+/// Follows one charging session and estimates when the board will say 100%.
+///
+/// Measured on a 5208 Pint: the charger holds about 3.1 A (190 W) and the
+/// percentage climbs linearly at about 28 s per point. At about 88% the
+/// pack reaches 63 V (4.2 V per cell), the charger switches to constant
+/// voltage, and the board jumps straight to 99-100%. It keeps charging
+/// for 30+ minutes after that while the power tapers from ~150 W to ~20 W.
+/// So "100%" arrives at the start of the taper. The estimate stops at the
+/// jump, which is also when the board passes 90%: past that point the cells
+/// gain little for a lot of waiting.
+public struct ChargeSession: Equatable, Sendable {
+    public struct Sample: Equatable, Sendable, Identifiable {
+        public let date: Date
+        public let percent: Int
+        public let watts: Double?
+        public var id: Date { date }
+    }
+
+    public private(set) var samples: [Sample] = []
+    public let startedAt: Date
+
+    /// Percent change needed before the measured rate replaces the power guess.
+    static let minimumMeasuredPoints = 3
+    /// Where the board stops counting up and jumps to 100%.
+    static let jumpPercent = 88
+
+    public init(startedAt: Date = .now) {
+        self.startedAt = startedAt
+    }
+
+    public var startPercent: Int? { samples.first?.percent }
+    public var latestPercent: Int? { samples.last?.percent }
+
+    /// Records a reading, keeping at most one sample every 30 seconds unless
+    /// the percentage changed.
+    public mutating func record(percent: Int, watts: Double?, at date: Date = .now) {
+        if let last = samples.last, last.percent == percent, date.timeIntervalSince(last.date) < 30 { return }
+        samples.append(Sample(date: date, percent: percent, watts: watts))
+    }
+
+    /// Samples where the percentage changed. Measuring between these avoids
+    /// skew from a session that starts partway through a percent.
+    var steps: [Sample] {
+        zip(samples.dropFirst(), samples).filter { $0.percent != $1.percent }.map(\.0)
+    }
+
+    var measuredSecondsPerPercent: Double? {
+        let steps = steps
+        guard let first = steps.first, let last = steps.last else { return nil }
+        let points = last.percent - first.percent
+        guard points >= Self.minimumMeasuredPoints else { return nil }
+        let span = last.date.timeIntervalSince(first.date)
+        return span > 0 ? span / Double(points) : nil
+    }
+
+    public var isMeasured: Bool { measuredSecondsPerPercent != nil }
+
+    /// The board reads 100% but the charger is still putting power in.
+    public static func isToppingOff(percent: Int?, watts: Double?) -> Bool {
+        (percent ?? 0) >= 99 && (watts ?? 0) > 5
+    }
+
+    /// Average charge power over the session.
+    public var averageWatts: Double? {
+        let watts = samples.compactMap(\.watts)
+        guard !watts.isEmpty else { return nil }
+        return watts.reduce(0, +) / Double(watts.count)
+    }
+
+    public func secondsToFull(packWattHours: Double) -> TimeInterval? {
+        guard let percent = latestPercent, percent < 100 else { return latestPercent == 100 ? 0 : nil }
+        let perPercent: Double
+        if let measured = measuredSecondsPerPercent {
+            perPercent = measured
+        } else if let watts = samples.last?.watts ?? averageWatts, watts > 20 {
+            perPercent = packWattHours / 100 / watts * 3600
+        } else {
+            return nil
+        }
+        return Double(max(1, Self.jumpPercent - percent)) * perPercent
+    }
+}

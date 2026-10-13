@@ -23,6 +23,9 @@ public struct Telemetry: Equatable, Sendable {
     public var powerWatts: Double?
     public var tripAmpHours: Double?
     public var tripRegenAmpHours: Double?
+    /// Raw `313` and `314` counters, 0.18 mAh per unit.
+    public var tripAmpHoursRaw: Int?
+    public var tripRegenAmpHoursRaw: Int?
     public var tripRevolutions: Int?
     public var lifetimeMiles: Int?
     public var lifetimeAmpHours: Int?
@@ -51,8 +54,19 @@ public struct Telemetry: Equatable, Sendable {
 
     public var tripMiles: Double? { tripKilometres.map { $0 * 0.621371 } }
 
+    public var isCharging: Bool { status?.charging == true }
+
+    /// While charging, the board reports charge power as negative motor
+    /// power on `304` (about -170 W on a Pint), so it isn't regen.
     public var isRegenerating: Bool {
-        usesModernTelemetry ? (powerWatts ?? 0) < 0 : (currentAmps ?? 0) < 0
+        guard !isCharging else { return false }
+        return usesModernTelemetry ? (powerWatts ?? 0) < 0 : (currentAmps ?? 0) < 0
+    }
+
+    /// Watts going into the pack while charging, when the board reports it.
+    public var chargingWatts: Double? {
+        guard isCharging, let watts = powerWatts, watts < 0 else { return nil }
+        return -watts
     }
 
     /// Newer firmware repurposes and retires several characteristics. The
@@ -107,7 +121,9 @@ public struct Telemetry: Equatable, Sendable {
         case .batteryLow5:
             if usesModernTelemetry { powerWatts = Double(Int16(bitPattern: value)) }
         case .tripAmpHours: tripAmpHours = Double(value) * ampHourScale
+            tripAmpHoursRaw = Int(value)
         case .tripRegenAmpHours: tripRegenAmpHours = Double(value) * ampHourScale
+            tripRegenAmpHoursRaw = Int(value)
         case .tripOdometer: tripRevolutions = Int(value)
         case .lifetimeOdometer: lifetimeMiles = Int(value)
         case .lifetimeAmpHours: lifetimeAmpHours = Int(value)
