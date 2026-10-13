@@ -29,6 +29,9 @@ public struct Telemetry: Equatable, Sendable {
     public var safetyHeadroom: Int?
     public var statusError: UInt16?
     public var lightsOn: Bool?
+    public var battery = BatteryDiagnostics()
+
+    public var status: BoardStatus? { statusError.map(BoardStatus.init(raw:)) }
 
     public init() {}
 
@@ -110,6 +113,7 @@ public struct Telemetry: Equatable, Sendable {
         case .lifetimeAmpHours: lifetimeAmpHours = Int(value)
         case .safetyHeadroom: safetyHeadroom = Int(value)
         case .statusError: statusError = value
+        case .lastErrorCode: battery.record(value)
         case .lightingMode: lightsOn = value == 1
         case .batteryCells:
             // The board streams one cell per notification. A plain read (or an

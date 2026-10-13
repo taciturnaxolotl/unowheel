@@ -82,8 +82,41 @@ The official app switches decoding when `q3.c.h(fw, hw)` is true: Pint >= 5056, 
 - **`31b` (cell voltages) is silent.** No notifications in 15 s with notify enabled, and reads return `0000`. The official app only subscribes to `31b` on older firmware, so it doesn't show cells on these boards either.
 - **`312` (current) reads 0.** The app ignores it.
 - **`304` now carries signed motor power in watts.** It used to be the "battery low 5%" flag. Idle it flickers between `0000` and `0003`; the app treats values beyond +/-10 W as real load and negative values as regen.
-- **`31e`** notifies constantly with small values (`0200`, `0301`, `0000`, `0100`), probably a status or step counter. Unknown.
-- **`31c`** reads `4700`, **`320`** reads `0004`, **`31d`** and **`31f`** read 0. Unknown.
+- **`31e`**, **`31c`**: see the diagnostic stream section below. **`320`** reads `0004`, **`31d`** and **`31f`** read 0, and none moved during the pad, tilt and wheel test.
+
+## Status bits and the diagnostic stream
+
+Measured on the 5208 Pint while pressing pads, tilting and spinning (`/tmp/owwatch.py`), then checked against the official app and other projects.
+
+**`30f` status** is a bitmask in the high byte. ponewheel's `DeviceStatus` documents the layout and the official app tests the same bits (`b2.f`: `& 256`, `& 512`, `& 1024`):
+
+| Bit (u16) | Meaning | Seen on 5208 |
+| --- | --- | --- |
+| `0x0100` | rider detected (engaged) | not while hand-pressing |
+| `0x0200` | footpad zone 1 | yes, front press |
+| `0x0400` | footpad zone 2 | yes, back press; `0x0600` both |
+| `0x0800` | ICSU fault | |
+| `0x1000` | ICSV fault | |
+| `0x2000` | charging | untested |
+| `0x4000` | BMS/controller comms fault | |
+| `0x8000` | broken capacitor | |
+
+floatface (Garmin GT app) saw the same footpad behaviour but hadn't mapped the bits.
+
+**`31c` is a multiplexed diagnostic stream, not just "last error code".** Each notification is `register << 8 | value`, and the board cycles through about 50 registers continuously (it also explains why ZWheel saw it "emitting a status bitmask"). The official app collects one full loop (`z1.c`) and decodes:
+
+| Register | Meaning | ow292642 |
+| --- | --- | --- |
+| `f0`, `f1` | battery cycle count, high and low byte | `00 01` = 1 |
+| `f2` | battery health % | `64` = 100 |
+| `c0` | battery type: 1 A123 LiFePO4, 2 VTC6 15s2p, 3 HG2 15s2p, 4 Q30 15s2p, 5 VTC5A 15s1p, 6 VTC5D 15s1p, 7 30Q6 15s2p, 9 VTC6A 18s2p, 10 P42A 18s2p, 11 40T3 18s2p | `06` = VTC5D 15s1p |
+| `d0`..`d3` | battery ID, big-endian u32 | `0x00139CD4` = 1285332 |
+| `20` | bootloader version | `08` |
+| everything else | sent verbatim as "Last Error codes" in support reports | `00`..`07`, `a3`, `b0`..`b9`, `ef`, `10`..`17`, `30`, `31`, `f3`, `40`..`48`, `50` |
+
+**`31e`** cycles `0100 → 0200 → 0301 → 0000` in lockstep with `31c`, one step per diagnostic register. It behaves like a frame counter for the stream. floatface labels it `custom_shaping`, but nothing here changed with pads, tilt or the wheel.
+
+**Trip amp-hours scale:** floatface measured roughly 5.4 raw units per mAh on a GT. That agrees with OWCE's 0.00018 Ah per unit (5.6 per mAh), so `313`/`314` keep the old scaling.
 
 ## Ride modes and names
 

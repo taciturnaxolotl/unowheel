@@ -124,6 +124,34 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
     }
 }
 
+@Suite struct StatusTests {
+    @Test func footpadBits() {
+        var t = Telemetry()
+        t.apply(.statusError, data: WireValue.encode(0x0600))
+        #expect(t.status?.frontPad == true)
+        #expect(t.status?.backPad == true)
+        #expect(t.status?.riderDetected == false)
+        t.apply(.statusError, data: WireValue.encode(0x2000))
+        #expect(t.status?.charging == true)
+        #expect(t.status?.faults.isEmpty == true)
+    }
+
+    @Test func decodesDiagnosticLoopFromOw292642() {
+        // One loop of 31c as captured from the 5208 Pint.
+        let loop: [UInt16] = [0x0600, 0x0700, 0xa343, 0xb00b, 0xb103, 0xb203, 0xb303, 0xb40b, 0xb503,
+                              0xb603, 0xb703, 0xb803, 0xb903, 0xefff, 0x108c, 0x1199, 0x12ff, 0x1378,
+                              0x1400, 0x154f, 0x16fe, 0x17c0, 0x2008, 0x30c3, 0x310b, 0xc006, 0xf000,
+                              0xf101, 0xf264, 0xf304, 0xd000, 0xd113, 0xd29c, 0xd3d4, 0x4000, 0x5000]
+        var t = Telemetry()
+        for word in loop { t.apply(.lastErrorCode, data: WireValue.encode(word)) }
+        #expect(t.battery.cycles == 1)
+        #expect(t.battery.healthPercent == 100)
+        #expect(t.battery.cellType == "Sony VTC5D, 15s1p")
+        #expect(t.battery.batteryID == 1_285_332)
+        #expect(t.battery.bootloaderVersion == 8)
+    }
+}
+
 @Suite struct RangeTests {
     func pint(battery: Int, rpm: Int = 0, watts: Int = 0) -> Telemetry {
         var t = Telemetry()

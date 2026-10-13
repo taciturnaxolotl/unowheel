@@ -59,7 +59,7 @@ public enum Characteristic: String, CaseIterable, Sendable {
         .rideMode, .batteryPercent, .pitch, .roll, .yaw, .tripOdometer, .rpm,
         .lightingMode, .statusError, .temperature, .currentAmps, .tripAmpHours,
         .tripRegenAmpHours, .batteryTemperature, .batteryVoltage, .safetyHeadroom,
-        .lifetimeOdometer, .lifetimeAmpHours, .batteryCells, .batteryLow5,
+        .lifetimeOdometer, .lifetimeAmpHours, .batteryCells, .batteryLow5, .lastErrorCode,
     ]
 }
 
