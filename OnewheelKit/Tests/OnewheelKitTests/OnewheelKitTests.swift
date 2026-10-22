@@ -119,6 +119,16 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(BoardModel.pint.topSpeedMPH(mode: nil) == 16)
     }
 
+    @Test func telemetrySurvivesCoding() throws {
+        var t = Telemetry()
+        t.apply(.hardwareRevision, data: WireValue.encode(5314))
+        t.apply(.batteryPercent, data: WireValue.encode(72))
+        t.apply(.lastErrorCode, data: WireValue.encode(0xf264))
+        let decoded = try JSONDecoder().decode(Telemetry.self, from: JSONEncoder().encode(t))
+        #expect(decoded == t)
+        #expect(decoded.battery.healthPercent == 100)
+    }
+
     @Test func speedFromRpm() {
         var t = Telemetry()
         t.apply(.hardwareRevision, data: WireValue.encode(5314))

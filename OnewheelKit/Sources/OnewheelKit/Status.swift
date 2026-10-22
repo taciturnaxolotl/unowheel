@@ -32,7 +32,7 @@ public struct BoardStatus: Equatable, Sendable {
 /// Battery facts carried on the `31c` diagnostic stream. The board cycles
 /// through about 50 one-byte registers, each sent as `register << 8 | value`;
 /// the official app decodes these ones (`z1.c` in the Android build).
-public struct BatteryDiagnostics: Equatable, Sendable {
+public struct BatteryDiagnostics: Equatable, Sendable, Codable {
     public private(set) var registers: [UInt8: UInt8] = [:]
 
     public init() {}

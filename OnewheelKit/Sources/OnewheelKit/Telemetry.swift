@@ -2,7 +2,7 @@ import Foundation
 
 /// Live board state, decoded from characteristic values. Scaling follows
 /// OWCE's `OWBoard.SetValue`, adjusted for the board's big-endian wire order.
-public struct Telemetry: Equatable, Sendable {
+public struct Telemetry: Equatable, Sendable, Codable {
     public var firmwareRevision: Int?
     public var hardwareRevision: Int?
     public var serialNumber: Int?
