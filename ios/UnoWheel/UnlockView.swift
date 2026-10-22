@@ -67,7 +67,7 @@ struct UnlockView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Disconnect") { connection.disconnect() }
+                    Button("Not now") { connection.skipBoard() }
                 }
                 if working {
                     ToolbarItem(placement: .confirmationAction) { ProgressView() }

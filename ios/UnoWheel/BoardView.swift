@@ -8,18 +8,21 @@ struct BoardView: View {
     @State private var showingLog = false
     @State private var renaming = false
     @State private var draftName = ""
+    @State private var addingBoard = false
 
-    private var t: Telemetry { connection.telemetry }
+    private var t: Telemetry { connection.shown }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 status
-                if connection.phase == .unlocked {
-                    if let error = t.status?.error { errorBanner(error) }
-                    if let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
-                    if t.isCharging { chargingCard } else { speedAndBattery }
+                if connection.hasData {
+                    if connection.isLive, let error = t.status?.error { errorBanner(error) }
+                    if connection.isLive, let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
+                    if connection.isLive, t.isCharging { chargingCard } else { speedAndBattery }
                     controls
+                        .disabled(!connection.isLive)
+                        .opacity(connection.isLive ? 1 : 0.5)
                     statsGrid
                     if t.reportsCellVoltages { cells }
                     if !t.battery.isEmpty { batteryCard }
@@ -30,9 +33,7 @@ struct BoardView: View {
         .navigationTitle(connection.displayName ?? "Board")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Disconnect", role: .destructive) { connection.disconnect() }
-            }
+            ToolbarItem(placement: .principal) { boardPicker }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Rename board", systemImage: "pencil") {
@@ -47,13 +48,15 @@ struct BoardView: View {
                             Label("Units", systemImage: "ruler")
                         }
                         .pickerStyle(.menu)
-                        Toggle(isOn: Binding(get: { connection.autoConnect }, set: connection.setAutoConnect)) {
-                            Label("Auto-connect", systemImage: "antenna.radiowaves.left.and.right")
-                        }
                     }
                     Button("Connection log", systemImage: "text.alignleft") { showingLog = true }
                     Button("Forget unlock code", systemImage: "key.slash", role: .destructive) {
                         connection.forgetResponse()
+                    }
+                    if let name = connection.boardName {
+                        Button("Forget board", systemImage: "trash", role: .destructive) {
+                            connection.forget(name)
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -67,17 +70,56 @@ struct BoardView: View {
         .sheet(isPresented: $showingLog) {
             LogView()
         }
+        .sheet(isPresented: $addingBoard) {
+            NavigationStack {
+                ScannerView(onPick: { addingBoard = false })
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { addingBoard = false } }
+                    }
+            }
+        }
         .alert("Rename board", isPresented: $renaming) {
             TextField(connection.boardName ?? "Name", text: $draftName)
             Button("Save") { connection.rename(to: draftName) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Leave empty to use the serial number.")
+            Text("Leave blank for the serial number.")
+        }
+    }
+
+    /// The title doubles as a board switcher.
+    private var boardPicker: some View {
+        Menu {
+            ForEach(connection.knownBoards, id: \.self) { name in
+                Button {
+                    connection.switchTo(name)
+                } label: {
+                    if name == connection.boardName?.lowercased() {
+                        Label(KnownBoards.displayName(for: name), systemImage: "checkmark")
+                    } else {
+                        Text(KnownBoards.displayName(for: name))
+                    }
+                }
+            }
+            Divider()
+            Button("Add board", systemImage: "plus") { addingBoard = true }
+        } label: {
+            HStack(spacing: 4) {
+                Text(connection.displayName ?? "Board").font(.headline)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.primary)
         }
     }
 
     @ViewBuilder private var status: some View {
         switch connection.phase {
+        case .waiting, .idle, .scanning, .failed:
+            offlineRow(icon: "dot.radiowaves.left.and.right", text: "Offline", animate: true)
+        case .bluetoothOff:
+            offlineRow(icon: "antenna.radiowaves.left.and.right.slash", text: "Bluetooth is off")
         case .connecting(let name):
             ProgressRow(text: "Connecting to \(name)")
         case .handshaking:
@@ -98,22 +140,56 @@ struct BoardView: View {
         }
     }
 
+    private func offlineRow(icon: String, text: String, animate: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .symbolEffect(.variableColor.iterative, options: .repeating, isActive: animate)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).font(.subheadline.weight(.semibold)).lineLimit(2)
+                if let seen = connection.lastSeenAt {
+                    TimelineView(.everyMinute) { context in
+                        Text("Last seen \(seen.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .id(context.date)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.fill.quaternary, in: .rect(cornerRadius: 18))
+    }
+
     private var speedAndBattery: some View {
         VStack(spacing: 16) {
             HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(speedText)
-                        .font(.system(size: 72, weight: .semibold, design: .rounded).monospacedDigit())
-                        .contentTransition(.numericText())
-                    Text(useMetric ? "km/h" : "mph")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+                if connection.isLive {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(speedText)
+                            .font(.system(size: 72, weight: .semibold, design: .rounded).monospacedDigit())
+                            .contentTransition(.numericText())
+                        Text(useMetric ? "km/h" : "mph")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let km = connection.rangeKm {
+                    // Offline there's no speed; range is what you want to know.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(distance(km: km, decimals: km < 16 ? 1 : 0)?.split(separator: " ").first.map(String.init) ?? "–")
+                            .font(.system(size: 64, weight: .semibold, design: .rounded).monospacedDigit())
+                        Text("\(useMetric ? "km" : "mi") left")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 BatteryRing(percent: t.batteryPercent ?? 0, tint: batteryTint)
                     .frame(width: 112, height: 112)
             }
-            if let km = connection.rangeKm {
+            if connection.isLive, let km = connection.rangeKm {
                 Divider()
                 HStack(alignment: .firstTextBaseline) {
                     Label {
@@ -125,9 +201,6 @@ struct BoardView: View {
                             .foregroundStyle(.tint)
                     }
                     Spacer()
-                    Text(connection.range.isLearned ? "Learned" : "Rated")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -158,7 +231,7 @@ struct BoardView: View {
                     } else if t.batteryPercent == 100 {
                         Text("Full").font(.system(size: 44, weight: .semibold, design: .rounded))
                     } else {
-                        Text("Estimating").font(.title2.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Charging").font(.title2.weight(.semibold)).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
@@ -205,7 +278,7 @@ struct BoardView: View {
 
     private func faultBanner(_ faults: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label("Board fault", systemImage: "exclamationmark.triangle.fill")
+            Label("Fault", systemImage: "exclamationmark.triangle.fill")
                 .font(.headline)
             ForEach(faults, id: \.self) { Text($0).font(.subheadline) }
         }
@@ -305,7 +378,8 @@ struct BoardView: View {
             if let volts = connection.packVolts {
                 Stat("Voltage", String(format: "%.1f V", volts), icon: "bolt")
             }
-            if t.usesModernTelemetry, !t.isCharging {
+            if !connection.isLive {
+            } else if t.usesModernTelemetry, !t.isCharging {
                 Stat(t.isRegenerating ? "Regen" : "Power", t.powerWatts.map { abs($0) < 10 ? "Idle" : String(format: "%.0f W", abs($0)) },
                      icon: t.isRegenerating ? "arrow.uturn.backward" : "bolt.horizontal")
             } else if !t.usesModernTelemetry {
@@ -319,7 +393,9 @@ struct BoardView: View {
             Stat("Trip used", t.tripAmpHours.map { String(format: "%.2f Ah", $0) }, icon: "minus.circle")
             Stat("Trip regen", t.tripRegenAmpHours.map { String(format: "%.2f Ah", $0) }, icon: "plus.circle")
             Stat("Lifetime", t.lifetimeMiles.map { useMetric ? "\(Int(Double($0) * 1.60934)) km" : "\($0) mi" }, icon: "road.lanes")
-            Stat("Pitch", t.pitch.map { String(format: "%.1f°", $0) }, icon: "angle")
+            if connection.isLive {
+                Stat("Pitch", t.pitch.map { String(format: "%.1f°", $0) }, icon: "angle")
+            }
             Stat("Efficiency", connection.range.whPerKm.map {
                 useMetric ? String(format: "%.1f Wh/km", $0) : String(format: "%.1f Wh/mi", $0 * 1.60934)
             }, icon: "leaf")
@@ -364,6 +440,7 @@ struct BoardView: View {
     }
 
     private var speedText: String {
+        guard connection.isLive else { return "–" }
         let speed = (useMetric ? t.speedKPH : t.speedMPH) ?? 0
         return String(format: "%.0f", speed)
     }

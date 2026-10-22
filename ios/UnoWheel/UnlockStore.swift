@@ -66,6 +66,27 @@ enum KnownBoards {
         }
     }
 
+    /// Known board names, current one first, then alphabetical.
+    static var names: [String] {
+        let current = lastConnected
+        return all.keys.sorted { a, b in
+            if a == current { return true }
+            if b == current { return false }
+            return displayName(for: a).localizedCaseInsensitiveCompare(displayName(for: b)) == .orderedAscending
+        }
+    }
+
+    static func forget(_ name: String) {
+        var boards = all
+        boards[name.lowercased()] = nil
+        all = boards
+        setNickname(nil, for: name)
+        UserDefaults.standard.removeObject(forKey: "telemetry.\(name.lowercased())")
+        UserDefaults.standard.removeObject(forKey: "range.\(name.lowercased())")
+        UnlockStore.remove(for: name)
+        if lastConnected == name.lowercased() { lastConnected = all.keys.sorted().first }
+    }
+
     static func remember(_ name: String, id: UUID) {
         var boards = all
         boards[name.lowercased()] = id

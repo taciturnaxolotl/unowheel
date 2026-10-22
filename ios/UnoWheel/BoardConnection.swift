@@ -79,20 +79,18 @@ final class BoardConnection: NSObject {
     var packVolts: Double? { telemetry.batteryVoltage ?? voltage.volts }
     var isToppingOff: Bool { ChargeSession.isToppingOff(percent: telemetry.batteryPercent, watts: telemetry.chargingWatts) }
 
-    var rangeKm: Double? { range.rangeKm(for: telemetry) }
+    var rangeKm: Double? { range.rangeKm(for: shown) }
 
-    private(set) var autoConnect = UserDefaults.standard.object(forKey: "autoConnect") as? Bool ?? true
+    /// Stats saved from the last time this board was connected.
+    private(set) var cached: Telemetry?
+    private(set) var lastSeenAt: Date?
 
-    func setAutoConnect(_ enabled: Bool) {
-        autoConnect = enabled
-        UserDefaults.standard.set(enabled, forKey: "autoConnect")
-        if enabled {
-            autoConnectPaused = false
-            armAutoConnect()
-        } else {
-            cancelWaiting()
-        }
-    }
+    var isLive: Bool { phase == .unlocked }
+    /// Live values when connected, otherwise the last known ones.
+    var shown: Telemetry { isLive ? telemetry : (cached ?? telemetry) }
+    var hasData: Bool { isLive || cached != nil }
+
+
 
     var isConnected: Bool {
         switch phase {
@@ -112,13 +110,18 @@ final class BoardConnection: NSObject {
     @ObservationIgnored private let notifyWaiters = WaiterTable<Void>()
     @ObservationIgnored private var keepAliveTask: Task<Void, Never>?
     @ObservationIgnored private var sessionTask: Task<Void, Never>?
-    @ObservationIgnored private var userDisconnected = false
+    /// Other known boards with a pending connect. Whichever board turns on
+    /// first gets picked up, so a second board needs no manual pairing step.
+    @ObservationIgnored private var pendingOthers: [CBPeripheral] = []
+    /// Set when you pick a board by hand: wait for that one only until it
+    /// connects, so the other board doesn't win the race.
+    @ObservationIgnored private var pinned = false
     @ObservationIgnored private let mirror = RideMirror()
     @ObservationIgnored private var mirrorTask: Task<Void, Never>?
     @ObservationIgnored private var lastTick = Date.now
     @ObservationIgnored private var lastRangeSave = Date.now
-    /// Set when you disconnect by hand, so we don't immediately grab the board
-    /// back. Cleared by picking a board or relaunching.
+    /// Set when you skip unlocking a board, so it isn't grabbed straight back.
+    /// Cleared after the app has been away for a while.
     @ObservationIgnored private var autoConnectPaused = false
     @ObservationIgnored private var isDemo = false
     @ObservationIgnored private var retryTask: Task<Void, Never>?
@@ -126,6 +129,12 @@ final class BoardConnection: NSObject {
 
     override init() {
         super.init()
+        if let name = KnownBoards.lastConnected {
+            boardName = name
+            nickname = KnownBoards.nickname(for: name)
+            loadRange(for: name)
+            loadCache(for: name)
+        }
         central = CBCentralManager(delegate: self, queue: .main, options: [
             CBCentralManagerOptionRestoreIdentifierKey: "sh.dunkirk.unowheel.central",
         ])
@@ -154,6 +163,7 @@ final class BoardConnection: NSObject {
             range.record(telemetry, seconds: elapsed)
             if now.timeIntervalSince(lastRangeSave) > 30 { saveRange() }
         }
+        if phase == .unlocked, now.timeIntervalSince(lastSeenAt ?? .distantPast) > 15 { saveCache() }
         mirror.sync(name: displayName, telemetry: telemetry, unlocked: phase == .unlocked,
                     rangeKm: rangeKm, rangeLearned: range.isLearned, startedAt: unlockedAt,
                     charge: chargeSession)
@@ -168,6 +178,81 @@ final class BoardConnection: NSObject {
         lastRangeSave = .now
         guard let boardName, let data = try? JSONEncoder().encode(range) else { return }
         UserDefaults.standard.set(data, forKey: "range.\(boardName.lowercased())")
+    }
+
+    private struct CachedBoard: Codable {
+        var telemetry: Telemetry
+        var seenAt: Date
+    }
+
+    private func loadCache(for board: String) {
+        let data = UserDefaults.standard.data(forKey: "telemetry.\(board.lowercased())")
+        let entry = data.flatMap { try? JSONDecoder().decode(CachedBoard.self, from: $0) }
+        cached = entry?.telemetry
+        lastSeenAt = entry?.seenAt
+    }
+
+    /// Keeps the slow-moving stats; drops what only means something live.
+    private func saveCache() {
+        guard let boardName, telemetry.looksUnlocked else { return }
+        var snapshot = telemetry
+        snapshot.rpm = nil
+        snapshot.powerWatts = nil
+        snapshot.currentAmps = nil
+        snapshot.statusError = nil
+        snapshot.pitch = nil
+        snapshot.roll = nil
+        snapshot.yaw = nil
+        cached = snapshot
+        lastSeenAt = .now
+        guard let data = try? JSONEncoder().encode(CachedBoard(telemetry: snapshot, seenAt: .now)) else { return }
+        UserDefaults.standard.set(data, forKey: "telemetry.\(boardName.lowercased())")
+    }
+
+    // MARK: - Boards
+
+    var knownBoards: [String] { KnownBoards.names }
+
+    /// Makes another known board the current one and waits for it.
+    func switchTo(_ name: String) {
+        guard name.lowercased() != boardName?.lowercased() else { return }
+        retryTask?.cancel()
+        saveRange()
+        dropPeripheral()
+        mirror.finish()
+        KnownBoards.lastConnected = name.lowercased()
+        boardName = name.lowercased()
+        nickname = KnownBoards.nickname(for: name)
+        telemetry = Telemetry()
+        loadRange(for: name)
+        loadCache(for: name)
+        autoConnectPaused = false
+        pinned = true
+        phase = .idle
+        armAutoConnect()
+    }
+
+    func forget(_ name: String) {
+        let isCurrent = name.lowercased() == boardName?.lowercased()
+        if isCurrent {
+            retryTask?.cancel()
+            dropPeripheral()
+            mirror.finish()
+        }
+        KnownBoards.forget(name)
+        guard isCurrent else { return }
+        if let next = KnownBoards.lastConnected {
+            boardName = nil
+            switchTo(next)
+        } else {
+            boardName = nil
+            nickname = nil
+            cached = nil
+            lastSeenAt = nil
+            telemetry = Telemetry()
+            phase = .idle
+            startScan()
+        }
     }
 
     #if DEBUG
@@ -201,6 +286,16 @@ final class BoardConnection: NSObject {
             }
             chargeSession = session
         }
+        if CommandLine.arguments.contains("-offline") {
+            t.rpm = nil
+            t.powerWatts = nil
+            t.statusError = nil
+            cached = t
+            lastSeenAt = .now.addingTimeInterval(-25 * 60)
+            telemetry = Telemetry()
+            phase = .idle
+            return
+        }
         telemetry = t
         unlockedAt = .now.addingTimeInterval(-600)
         phase = .unlocked
@@ -214,10 +309,26 @@ final class BoardConnection: NSObject {
     func armAutoConnect() {
         retryTask?.cancel()
         retryTask = nil
-        guard autoConnect, !autoConnectPaused, central.state == .poweredOn, peripheral == nil,
+        guard !autoConnectPaused, central.state == .poweredOn, peripheral == nil,
               let name = KnownBoards.lastConnected, let id = KnownBoards.all[name],
               let target = central.retrievePeripherals(withIdentifiers: [id]).first else { return }
         wait(for: target, name: name)
+        pendOthers(except: name)
+    }
+
+    private func pendOthers(except name: String) {
+        guard !pinned else { return }
+        let others = KnownBoards.all.filter { $0.key != name.lowercased() }.map(\.value)
+        pendingOthers = central.retrievePeripherals(withIdentifiers: others)
+        for other in pendingOthers {
+            other.delegate = self
+            central.connect(other)
+        }
+    }
+
+    private func cancelOthers() {
+        for other in pendingOthers { central.cancelPeripheralConnection(other) }
+        pendingOthers = []
     }
 
     /// A pending connect never times out: iOS completes it whenever the board
@@ -232,7 +343,7 @@ final class BoardConnection: NSObject {
     /// Tries again shortly, so a board that drops out mid-handshake doesn't
     /// leave the app stuck or hammering the radio.
     private func scheduleRetry(after seconds: Double = 2) {
-        guard autoConnect, !autoConnectPaused, !userDisconnected else { return }
+        guard !autoConnectPaused else { return }
         retryTask?.cancel()
         if let name = KnownBoards.lastConnected { phase = .waiting(name) }
         retryTask = Task { [weak self] in
@@ -242,31 +353,33 @@ final class BoardConnection: NSObject {
         }
     }
 
-    func cancelWaiting() {
-        guard case .waiting = phase else { return }
+    /// "Not now" on the unlock sheet: let go of this board for a while.
+    func skipBoard() {
         retryTask?.cancel()
+        cancelOthers()
         dropPeripheral()
+        mirror.finish()
         autoConnectPaused = true
         phase = .idle
-        startScan()
     }
 
     /// Forgets the current board before cancelling, so the disconnect
     /// callback for it is ignored rather than mistaken for a new drop.
     private func dropPeripheral() {
+        saveCache()
+        cancelOthers()
         teardown()
         guard let old = peripheral else { return }
         peripheral = nil
         central.cancelPeripheralConnection(old)
     }
 
-    /// Call when the app comes to the foreground. A manual disconnect pauses
+    /// Call when the app comes to the foreground. Skipping a board pauses
     /// auto-connect for this visit only.
     func appBecameActive() {
         defer { backgroundedAt = nil }
         guard let since = backgroundedAt, Date.now.timeIntervalSince(since) > 120, autoConnectPaused else { return }
         autoConnectPaused = false
-        userDisconnected = false
         if peripheral == nil { armAutoConnect() }
     }
 
@@ -285,6 +398,7 @@ final class BoardConnection: NSObject {
         chargeSession = nil
         voltage = PackVoltageEstimator()
         loadRange(for: name)
+        loadCache(for: name)
         peripheral = target
         target.delegate = self
     }
@@ -301,8 +415,11 @@ final class BoardConnection: NSObject {
             }
         }
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
-        if case .waiting = phase { return }
-        phase = .scanning
+        // Scanning is a side activity; don't overwrite a live or pending connection.
+        switch phase {
+        case .idle, .failed, .bluetoothOff: phase = .scanning
+        default: break
+        }
     }
 
     func stopScan() {
@@ -327,9 +444,12 @@ final class BoardConnection: NSObject {
             return
         }
         retryTask?.cancel()
-        if peripheral?.identifier != target.identifier { dropPeripheral() }
-        userDisconnected = false
+        if peripheral?.identifier != target.identifier {
+            dropPeripheral()
+            mirror.finish()
+        }
         autoConnectPaused = false
+        pinned = true
         KnownBoards.lastConnected = board.name
         // A remembered board that hasn't been heard from may be off or out
         // of range; wait for it rather than spin on "Connecting".
@@ -342,17 +462,6 @@ final class BoardConnection: NSObject {
         phase = .connecting(board.name)
         record("connecting to \(board.name)")
         central.connect(target)
-    }
-
-    func disconnect() {
-        userDisconnected = true
-        autoConnectPaused = true
-        retryTask?.cancel()
-        saveRange()
-        dropPeripheral()
-        mirror.finish()
-        phase = .idle
-        startScan()
     }
 
     private func teardown() {
@@ -422,13 +531,9 @@ final class BoardConnection: NSObject {
         } catch is CancellationError {
         } catch {
             record("session failed: \(error.localizedDescription)")
-            if autoConnect, !autoConnectPaused, !userDisconnected {
-                dropPeripheral()
-                mirror.finish()
-                scheduleRetry()
-            } else {
-                fail(error)
-            }
+            dropPeripheral()
+            mirror.finish()
+            scheduleRetry()
         }
     }
 
@@ -621,6 +726,7 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
                     sessionTask = Task { await runSession() }
                 } else if restored.state != .connected {
                     central.connect(restored)
+                    if let name = boardName { pendOthers(except: name) }
                 }
             } else {
                 armAutoConnect()
@@ -629,6 +735,7 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
         case .poweredOff, .unauthorized, .unsupported:
             retryTask?.cancel()
             teardown()
+            pendingOthers = []
             peripheral = nil
             mirror.finish()
             phase = .bluetoothOff
@@ -658,10 +765,21 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        guard peripheral.identifier == self.peripheral?.identifier else {
-            central.cancelPeripheralConnection(peripheral)
-            return
+        if peripheral.identifier != self.peripheral?.identifier {
+            // Another known board turned on first: make it the current one.
+            guard pendingOthers.contains(where: { $0.identifier == peripheral.identifier }),
+                  let name = KnownBoards.all.first(where: { $0.value == peripheral.identifier })?.key else {
+                central.cancelPeripheralConnection(peripheral)
+                return
+            }
+            pendingOthers.removeAll { $0.identifier == peripheral.identifier }
+            if let waiting = self.peripheral { central.cancelPeripheralConnection(waiting) }
+            KnownBoards.lastConnected = name
+            prepare(peripheral, name: name)
+            record("\(name) turned on first")
         }
+        cancelOthers()
+        pinned = false
         central.stopScan()
         retryTask?.cancel()
         record("connected")
@@ -670,31 +788,27 @@ extension BoardConnection: @preconcurrency CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        guard peripheral.identifier == self.peripheral?.identifier else { return }
-        self.peripheral = nil
-        if autoConnect, !autoConnectPaused, !userDisconnected {
-            record("connect failed, trying again")
-            scheduleRetry()
+        guard peripheral.identifier == self.peripheral?.identifier else {
+            pendingOthers.removeAll { $0.identifier == peripheral.identifier }
             return
         }
-        fail(BoardError.bluetooth(error?.localizedDescription ?? "Couldn't connect."))
+        self.peripheral = nil
+        record("connect failed, trying again")
+        cancelOthers()
+        scheduleRetry()
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         // Ignore boards we already let go of.
         guard peripheral.identifier == self.peripheral?.identifier else { return }
+        saveCache()
         teardown()
         saveRange()
         mirror.finish()
         self.peripheral = nil
         record("disconnected\(error.map { ": \($0.localizedDescription)" } ?? "")")
-        if autoConnect, !autoConnectPaused, !userDisconnected {
-            // Straight back to waiting: the board just went out of range or off.
-            armAutoConnect()
-        } else {
-            phase = .failed("Board disconnected.")
-            startScan()
-        }
+        // Straight back to waiting: the board went out of range or off.
+        armAutoConnect()
     }
 }
 

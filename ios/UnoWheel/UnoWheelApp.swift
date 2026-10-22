@@ -31,13 +31,15 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if connection.isConnected {
+                // Once a board is known, its screen is home; the list only
+                // shows on first run.
+                if connection.boardName != nil {
                     BoardView()
                 } else {
                     ScannerView()
                 }
             }
         }
-        .animation(.default, value: connection.isConnected)
+        .animation(.default, value: connection.boardName == nil)
     }
 }

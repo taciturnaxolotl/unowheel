@@ -2,13 +2,20 @@ import SwiftUI
 
 struct ScannerView: View {
     @Environment(BoardConnection.self) private var connection
+    /// Set when shown as the "Add board" sheet; called after picking.
+    var onPick: (() -> Void)?
+
+    private var boards: [DiscoveredBoard] {
+        guard onPick != nil else { return connection.nearby }
+        return connection.discovered.filter { $0.name.lowercased() != connection.boardName?.lowercased() }
+    }
 
     var body: some View {
         List {
-            switch connection.phase {
+            switch onPick == nil ? connection.phase : (connection.phase == .bluetoothOff ? .bluetoothOff : .idle) {
             case .bluetoothOff:
                 ContentUnavailableView("Bluetooth is off", systemImage: "antenna.radiowaves.left.and.right.slash",
-                                       description: Text("Turn on Bluetooth to find your board."))
+                                       description: Text("Turn on Bluetooth to connect."))
             case .failed(let message):
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -23,20 +30,19 @@ struct ScannerView: View {
                             .symbolEffect(.variableColor.iterative, options: .repeating)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Waiting for \(KnownBoards.displayName(for: name))").font(.headline)
-                            Text("Connects when the board turns on.")
+                            Text("Turn it on to connect.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
                     }
-                    Button("Cancel", role: .cancel) { connection.cancelWaiting() }
                 }
             default:
                 EmptyView()
             }
 
             Section {
-                if connection.nearby.isEmpty && connection.phase != .bluetoothOff && !connection.isWaiting {
+                if boards.isEmpty && connection.phase != .bluetoothOff && (onPick != nil || !connection.isWaiting) {
                     HStack(spacing: 12) {
                         ProgressView()
                         Text("Searching")
@@ -44,9 +50,10 @@ struct ScannerView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                ForEach(connection.nearby) { board in
+                ForEach(boards) { board in
                     Button {
                         connection.connect(board)
+                        onPick?()
                     } label: {
                         HStack {
                             Image(systemName: "circle.circle")
@@ -71,10 +78,10 @@ struct ScannerView: View {
             } header: {
                 Text("Nearby")
             } footer: {
-                Text("Not listed? Close the Onewheel app. A board connects to one phone at a time.")
+                Text("Missing? Close the Onewheel app.")
             }
         }
-        .navigationTitle("UnoWheel")
+        .navigationTitle(onPick == nil ? "UnoWheel" : "Add board")
         .refreshable { connection.startScan() }
         .onAppear { connection.startScan() }
         .onDisappear { connection.stopScan() }
