@@ -12,6 +12,9 @@ final class RideMirror {
     private var lastState: RideAttributes.ContentState?
     private var lastWidgetReload = Date.distantPast
     private var topSpeed = 0
+    /// Alerts already shown during this activity, so each fires once.
+    private var alertsFired: Set<String> = []
+    private var lastPushbackAlert = Date.distantPast
     private var rideStartedAt: Date?
     private var rideTrip = ""
     private var reportedDisabled = false
@@ -33,7 +36,7 @@ final class RideMirror {
     }
 
     func sync(name: String?, telemetry t: Telemetry, unlocked: Bool,
-              rangeKm: Double?, rangeLearned: Bool, startedAt: Date?, charge: ChargeSession?) {
+              rangeKm: Double?, rangeLearned: Bool, startedAt: Date?, charge: ChargeSession?, ride: Ride?) {
         guard let name else {
             finish()
             return
@@ -49,7 +52,7 @@ final class RideMirror {
         updateSnapshot(name: name, telemetry: t, connected: unlocked, range: range, fullAt: fullAt, toppingOff: toppingOff)
         if unlocked {
             updateActivity(name: name, telemetry: t, range: range, rangeLearned: rangeLearned,
-                           startedAt: startedAt ?? .now, fullAt: fullAt, toppingOff: toppingOff)
+                           startedAt: startedAt ?? .now, fullAt: fullAt, toppingOff: toppingOff, ride: ride)
         } else {
             endActivity()
         }
@@ -132,7 +135,7 @@ final class RideMirror {
     }
 
     private func updateActivity(name: String, telemetry t: Telemetry, range: String?, rangeLearned: Bool,
-                                startedAt: Date, fullAt: Date?, toppingOff: Bool) {
+                                startedAt: Date, fullAt: Date?, toppingOff: Bool, ride: Ride?) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             if !reportedDisabled {
                 reportedDisabled = true
@@ -157,7 +160,10 @@ final class RideMirror {
             speedMax: Int((t.model.topSpeedMPH(mode: t.rideMode) * (metric ? 1.609344 : 1)).rounded()),
             chargeWatts: Int(((t.chargingWatts ?? 0) / 5).rounded()) * 5,
             fullAt: t.isCharging ? fullAt : nil,
-            toppingOff: t.isCharging && toppingOff
+            toppingOff: t.isCharging && toppingOff,
+            lightsOn: t.lightsOn ?? false,
+            rideDistance: ride.map { formatDistance($0.distanceKm, metric: metric) } ?? "",
+            rideMinutes: ride.map { Int($0.movingTime / 60) } ?? 0
         )
         guard state != lastState else { return }
         lastState = state
@@ -165,7 +171,14 @@ final class RideMirror {
 
         if let activity, activity.activityState == .active {
             let id = activity.id
-            Task { await Self.find(id)?.update(content) }
+            let alert = alert(for: t, speed: speed, max: state.speedMax)
+            Task {
+                if let alert {
+                    await Self.find(id)?.update(content, alertConfiguration: alert)
+                } else {
+                    await Self.find(id)?.update(content)
+                }
+            }
             return
         }
         // iOS only lets an app start a Live Activity from the foreground, so a
@@ -185,7 +198,34 @@ final class RideMirror {
         }
     }
 
+    /// One-off alerts that light up the lock screen. Each fires once per
+    /// activity, except pushback, which can repeat after a minute.
+    private func alert(for t: Telemetry, speed: Int, max: Int) -> AlertConfiguration? {
+        func once(_ key: String, _ title: String, _ body: String) -> AlertConfiguration? {
+            guard !alertsFired.contains(key) else { return nil }
+            alertsFired.insert(key)
+            return AlertConfiguration(title: LocalizedStringResource(stringLiteral: title),
+                                      body: LocalizedStringResource(stringLiteral: body), sound: .default)
+        }
+        if let error = t.status?.error {
+            return once("error\(error.code)", error.title, error.advice)
+        }
+        let battery = t.batteryPercent ?? 100
+        if t.isCharging {
+            if battery >= 90 { return once("charged", "Charged to 90%", "Unplug now, or leave it to top off.") }
+            return nil
+        }
+        if battery <= 10 { return once("battery10", "Battery 10%", "Head home soon.") }
+        if battery <= 20 { return once("battery20", "Battery 20%", "Range is getting short.") }
+        if max > 0, Double(speed) >= Double(max) * 0.9, Date.now.timeIntervalSince(lastPushbackAlert) > 60 {
+            lastPushbackAlert = .now
+            return AlertConfiguration(title: "Near top speed", body: "Pushback is close.", sound: .default)
+        }
+        return nil
+    }
+
     private func endActivity() {
+        alertsFired = []
         guard let activity else { return }
         self.activity = nil
         let id = activity.id

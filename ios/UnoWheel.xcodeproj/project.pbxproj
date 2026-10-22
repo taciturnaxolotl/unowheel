@@ -12,6 +12,7 @@
 		5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */; };
 		5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C9A433C252BB5503D037ED /* BatteryWidget.swift */; };
 		6025C73120A6FEF4F83685A6 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
+		6A85E92DDC8E265C6B3F408B /* LightsIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF5DA7D8A532510766EE31E /* LightsIntent.swift */; };
 		6DA052936291834EFF123F23 /* UnoWheelWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B35FBEB8E33EE81FF8DD05F /* OnewheelKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF99CDA47937E74370783800 /* OnewheelKit */; };
 		8CBAE7CC81CB7602F2844780 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
@@ -20,6 +21,7 @@
 		ABBA1D2E6D2338A90F278298 /* UnlockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */; };
 		BE04CF21B48CE8EE3B9E77E4 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1A24D60E710982DA6A0D80 /* ScannerView.swift */; };
 		CF745167EE55F7604F1554F7 /* RidesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B104B5E09107FDD9FA58D5 /* RidesView.swift */; };
+		D6FDBA1B7CFD90CD63788064 /* LightsIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF5DA7D8A532510766EE31E /* LightsIntent.swift */; };
 		D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */; };
 		DA0DD611EEEEB27EA092DF61 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 44C36F41820D5863016AC6E8 /* Assets.xcassets */; };
 		E27A174A241ACCB0E3E14100 /* Waiters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */; };
@@ -68,6 +70,7 @@
 		97828C944F6A976A2DF82772 /* UnoWheelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelApp.swift; sourceTree = "<group>"; };
 		A1C9A433C252BB5503D037ED /* BatteryWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
 		A4B104B5E09107FDD9FA58D5 /* RidesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesView.swift; sourceTree = "<group>"; };
+		BFF5DA7D8A532510766EE31E /* LightsIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightsIntent.swift; sourceTree = "<group>"; };
 		EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardConnection.swift; sourceTree = "<group>"; };
 		F3D6FFB153009A78C10A5037 /* UnlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -96,6 +99,7 @@
 		9AD820F402602D549F027CF6 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				BFF5DA7D8A532510766EE31E /* LightsIntent.swift */,
 				5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */,
 			);
 			path = Shared;
@@ -249,6 +253,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */,
+				6A85E92DDC8E265C6B3F408B /* LightsIntent.swift in Sources */,
 				9F1D975C104D557EE8FD77D0 /* RideLiveActivity.swift in Sources */,
 				8CBAE7CC81CB7602F2844780 /* SharedModels.swift in Sources */,
 				5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */,
@@ -261,6 +266,7 @@
 			files = (
 				D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */,
 				95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */,
+				D6FDBA1B7CFD90CD63788064 /* LightsIntent.swift in Sources */,
 				0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */,
 				E9BA92E7A3D54F1137B366E0 /* Rides.swift in Sources */,
 				CF745167EE55F7604F1554F7 /* RidesView.swift in Sources */,
@@ -363,7 +369,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -483,7 +489,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;

@@ -146,6 +146,7 @@ final class BoardConnection: NSObject {
             CBCentralManagerOptionRestoreIdentifierKey: "sh.dunkirk.unowheel.central",
         ])
         mirror.log = { [weak self] line in self?.record(line) }
+        LightsBridge.handler = { [weak self] on in await self?.applyLights(on) }
         mirrorTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -173,9 +174,13 @@ final class BoardConnection: NSObject {
             if now.timeIntervalSince(lastRangeSave) > 30 { saveRange() }
         }
         if phase == .unlocked, now.timeIntervalSince(lastSeenAt ?? .distantPast) > 15 { saveCache() }
+        syncMirror()
+    }
+
+    private func syncMirror() {
         mirror.sync(name: displayName, telemetry: telemetry, unlocked: phase == .unlocked,
                     rangeKm: rangeKm, rangeLearned: range.isLearned, startedAt: unlockedAt,
-                    charge: chargeSession)
+                    charge: chargeSession, ride: recorder.current)
     }
 
     private func loadRange(for board: String) {
@@ -646,6 +651,7 @@ final class BoardConnection: NSObject {
     // MARK: - Controls
 
     func setRideMode(_ mode: RideMode) {
+        guard (telemetry.speedKPH ?? 0) < 1 else { return }
         Task {
             do {
                 try await write(.rideMode, WireValue.encode(mode.value), withResponse: true)
@@ -655,12 +661,19 @@ final class BoardConnection: NSObject {
     }
 
     func setLights(_ on: Bool) {
-        Task {
-            do {
-                try await write(.lightingMode, WireValue.encode(on ? 1 : 0), withResponse: true)
-                telemetry.apply(.lightingMode, data: try await read(.lightingMode))
-            } catch { record("lights: \(error.localizedDescription)") }
+        Task { await applyLights(on) }
+    }
+
+    /// Writes the lights, reads them back, and pushes the result to the Live
+    /// Activity at once instead of waiting for the next tick.
+    func applyLights(_ on: Bool) async {
+        do {
+            try await write(.lightingMode, WireValue.encode(on ? 1 : 0), withResponse: true)
+            telemetry.apply(.lightingMode, data: try await read(.lightingMode))
+        } catch {
+            record("lights: \(error.localizedDescription)")
         }
+        syncMirror()
     }
 
     func rename(to newName: String) {

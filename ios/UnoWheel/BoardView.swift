@@ -358,6 +358,8 @@ struct BoardView: View {
                         .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
+                // Switching mode while moving faults the board.
+                .disabled((t.speedKPH ?? 0) >= 1)
                 .sensoryFeedback(.selection, trigger: t.rideMode)
                 if let mode = t.rideMode {
                     if let current = t.model.rideModes.first(where: { $0.value == mode }) {

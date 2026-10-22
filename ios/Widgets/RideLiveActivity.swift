@@ -1,12 +1,12 @@
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
 struct RideLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RideAttributes.self) { context in
-            LockScreenRide(context: context)
-                .padding(16)
+            ActivityContent(context: context)
                 .activityBackgroundTint(.black.opacity(0.65))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
@@ -44,9 +44,17 @@ struct RideLiveActivity: Widget {
                                 .font(.callout.monospacedDigit())
                         }
                     } else {
-                        SideBattery(percent: state.batteryPercent, tint: batteryColor(state.batteryPercent))
-                            .frame(height: 26)
-                            .padding(.horizontal, 4)
+                        HStack(spacing: 12) {
+                            if !state.rideDistance.isEmpty {
+                                Label(state.rideDistance, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                                Label("\(state.rideMinutes)m", systemImage: "timer")
+                                Label("\(state.topSpeed) top", systemImage: "gauge.with.needle")
+                            }
+                            Spacer()
+                            LightsButton(on: state.lightsOn)
+                        }
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .padding(.horizontal, 4)
                     }
                 }
             } compactLeading: {
@@ -71,6 +79,7 @@ struct RideLiveActivity: Widget {
                 .tint(batteryColor(state.batteryPercent))
             }
         }
+        .supplementalActivityFamilies([.small])
     }
 }
 
@@ -80,6 +89,64 @@ func stateColor(_ state: RideState) -> Color {
     case .braking: .green
     case .stopped: .secondary
     case .charging: .green
+    }
+}
+
+/// Picks the layout: the full card on the phone, a compact one on the watch.
+private struct ActivityContent: View {
+    @Environment(\.activityFamily) private var family
+    let context: ActivityViewContext<RideAttributes>
+
+    var body: some View {
+        switch family {
+        case .small:
+            WatchRide(state: context.state)
+        default:
+            LockScreenRide(context: context).padding(16)
+        }
+    }
+}
+
+/// Apple Watch Smart Stack: speed and battery, big enough to read mid-ride.
+private struct WatchRide: View {
+    let state: RideAttributes.ContentState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            LeadingBadge(state: state)
+                .frame(width: 54, height: 54)
+            VStack(alignment: .leading, spacing: 4) {
+                SideBattery(percent: state.batteryPercent,
+                            tint: state.state == .charging ? .green : batteryColor(state.batteryPercent),
+                            showsPercent: true)
+                    .frame(height: 24)
+                if !state.range.isEmpty, state.state != .charging {
+                    Text("\(state.range) left")
+                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(6)
+        .foregroundStyle(.white)
+    }
+}
+
+/// Lights toggle that works from the lock screen without opening the app.
+/// A real Toggle, so iOS flips it instantly on tap.
+private struct LightsButton: View {
+    let on: Bool
+
+    var body: some View {
+        Toggle(isOn: on, intent: ToggleLightsIntent()) {
+            Image(systemName: on ? "lightbulb.max.fill" : "lightbulb.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 26, height: 26)
+        }
+        .toggleStyle(.button)
+        .buttonBorderShape(.circle)
+        .tint(.yellow)
+        .accessibilityLabel("Lights")
     }
 }
 
@@ -143,15 +210,25 @@ private struct LockScreenRide: View {
                             .padding(.vertical, 3)
                             .background(.white.opacity(0.12), in: .capsule)
                     }
+                    if !charging { LightsButton(on: state.lightsOn) }
                 }
                 SideBattery(percent: state.batteryPercent,
                             tint: charging ? .green : batteryColor(state.batteryPercent),
                             showsPercent: true)
                     .frame(height: 40)
-                Label(mainLine(state), systemImage: charging ? "clock.fill" : "point.topleft.down.to.point.bottomright.curvepath")
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .contentTransition(.numericText())
-                    .lineLimit(1)
+                HStack {
+                    Label(mainLine(state), systemImage: charging ? "clock.fill" : "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if !state.rideDistance.isEmpty {
+                        Text("\(state.rideDistance) · \(state.rideMinutes)m")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
         .foregroundStyle(.white)

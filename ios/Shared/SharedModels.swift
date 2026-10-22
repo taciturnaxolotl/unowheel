@@ -96,6 +96,10 @@ struct RideAttributes: ActivityAttributes {
         var chargeWatts: Int = 0
         var fullAt: Date? = nil
         var toppingOff: Bool = false
+        var lightsOn: Bool = false
+        /// This ride, from the recorder: distance text and minutes moving.
+        var rideDistance: String = ""
+        var rideMinutes: Int = 0
     }
 
     var boardName: String
