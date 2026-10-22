@@ -9,15 +9,23 @@ public struct RidePoint: Codable, Equatable, Sendable {
     /// Board speed in km/h, from wheel rpm.
     public var speedKPH: Double
     public var batteryPercent: Int?
+    /// Motor power in watts; negative while braking (regen).
+    public var watts: Double?
+    public var motorTempC: Int?
+    public var controllerTempC: Int?
 
     public init(time: Date, latitude: Double? = nil, longitude: Double? = nil, altitude: Double? = nil,
-                speedKPH: Double, batteryPercent: Int? = nil) {
+                speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
+                motorTempC: Int? = nil, controllerTempC: Int? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
         self.altitude = altitude
         self.speedKPH = speedKPH
         self.batteryPercent = batteryPercent
+        self.watts = watts
+        self.motorTempC = motorTempC
+        self.controllerTempC = controllerTempC
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
@@ -30,6 +38,12 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var points: [RidePoint]
     /// Distance from the board's odometer, which beats GPS on tree-covered trails.
     public var odometerKm: Double?
+    /// Place names for the start and end, filled in after the ride by
+    /// reverse geocoding. A park or neighbourhood when there is one.
+    public var startPlace: String?
+    public var endPlace: String?
+    /// Your own name for the ride, if you've given it one.
+    public var customTitle: String?
 
     public init(id: UUID = UUID(), board: String, points: [RidePoint] = [], odometerKm: Double? = nil) {
         self.id = id
@@ -73,6 +87,72 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
 
     public var hasRoute: Bool { points.filter(\.hasLocation).count >= 2 }
 
+    /// Energy drawn from the pack, in watt-hours, from power over time.
+    public var energyWh: Double { integrateWatts { max($0, 0) } }
+
+    /// Energy put back by braking and downhills.
+    public var regenWh: Double { integrateWatts { max(-$0, 0) } }
+
+    public var peakWatts: Double? { points.compactMap(\.watts).max() }
+
+    public var hasPower: Bool { points.contains { $0.watts != nil } }
+
+    /// Wh per km over the ride, net of regen.
+    public var whPerKm: Double? {
+        guard hasPower, distanceKm > 0.1 else { return nil }
+        return max(energyWh - regenWh, 0) / distanceKm
+    }
+
+    /// Metres climbed, ignoring GPS altitude wobble under 2 m.
+    public var elevationGainM: Double? {
+        let altitudes = points.compactMap(\.altitude)
+        guard altitudes.count > 1 else { return nil }
+        var gain = 0.0
+        var anchor = altitudes[0]
+        for altitude in altitudes.dropFirst() {
+            if altitude - anchor >= 2 {
+                gain += altitude - anchor
+                anchor = altitude
+            } else if altitude < anchor {
+                anchor = altitude
+            }
+        }
+        return gain
+    }
+
+    public var maxMotorTempC: Int? { points.compactMap(\.motorTempC).max() }
+    public var maxControllerTempC: Int? { points.compactMap(\.controllerTempC).max() }
+
+    private func integrateWatts(_ transform: (Double) -> Double) -> Double {
+        zip(points, points.dropFirst()).reduce(0) { total, pair in
+            guard let watts = pair.0.watts else { return total }
+            let gap = pair.1.time.timeIntervalSince(pair.0.time)
+            return gap < 10 ? total + transform(watts) * gap / 3600 : total
+        }
+    }
+
+    /// Ends within 300 m of where it began.
+    public var isLoop: Bool {
+        guard let first = points.first(where: \.hasLocation), let last = points.last(where: \.hasLocation) else { return false }
+        return Self.haversineKm(first, last) < 0.3
+    }
+
+    /// "Evening loop at Alum Creek Park", "Westerville to Columbus",
+    /// or just "Morning ride" when there's no place yet.
+    public func title(calendar: Calendar = .current) -> String {
+        if let customTitle, !customTitle.isEmpty { return customTitle }
+        let hour = calendar.component(.hour, from: startedAt)
+        let time = switch hour {
+        case 5..<12: "Morning"
+        case 12..<17: "Afternoon"
+        case 17..<21: "Evening"
+        default: "Night"
+        }
+        guard let start = startPlace else { return "\(time) ride" }
+        if let end = endPlace, end != start, !isLoop { return "\(start) to \(end)" }
+        return isLoop ? "\(time) loop at \(start)" : "\(time) ride in \(start)"
+    }
+
     /// Worth keeping: moved at least 100 m or rode for a minute.
     public var isWorthSaving: Bool { distanceKm >= 0.1 || movingTime >= 60 }
 
@@ -95,6 +175,33 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
             }
         }
         return segments.filter { $0.points.count >= 2 }
+    }
+
+    /// GPS jitters a few metres; a short moving average makes the line
+    /// read as the path you actually rode. Speed is left as recorded.
+    public func smoothed(window: Int = 5) -> Ride {
+        let located = points.enumerated().filter { $0.element.hasLocation }
+        guard located.count > window else { return self }
+        var copy = self
+        let half = window / 2
+        for (i, entry) in located.enumerated() {
+            let lo = max(0, i - half), hi = min(located.count - 1, i + half)
+            let slice = located[lo...hi].map(\.element)
+            copy.points[entry.offset].latitude = slice.compactMap(\.latitude).reduce(0, +) / Double(slice.count)
+            copy.points[entry.offset].longitude = slice.compactMap(\.longitude).reduce(0, +) / Double(slice.count)
+        }
+        return copy
+    }
+
+    /// Keeps at most `maxPoints` located points, evenly spaced, for drawing
+    /// many rides at once.
+    public func thinned(maxPoints: Int) -> Ride {
+        let located = points.filter(\.hasLocation)
+        guard located.count > maxPoints, maxPoints > 1 else { return self }
+        let step = Double(located.count - 1) / Double(maxPoints - 1)
+        var copy = self
+        copy.points = (0..<maxPoints).map { located[Int((Double($0) * step).rounded())] }
+        return copy
     }
 
     static func haversineKm(_ a: RidePoint, _ b: RidePoint) -> Double {

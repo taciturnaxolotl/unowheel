@@ -286,6 +286,63 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(segments[2].points.first == segments[1].points.last)
     }
 
+    @Test func smoothingAndThinning() {
+        // A straight line with every other point nudged sideways.
+        let zigzag = Ride(board: "ow1", points: (0..<20).map { i in
+            RidePoint(time: Date(timeIntervalSince1970: Double(i)), latitude: 40 + Double(i) * 0.001,
+                      longitude: -83 + (i.isMultiple(of: 2) ? 0.0002 : -0.0002), speedKPH: 15)
+        })
+        let smooth = zigzag.smoothed()
+        let wiggle = { (r: Ride) in r.points.compactMap(\.longitude).map { abs($0 + 83) }.max() ?? 0 }
+        #expect(wiggle(smooth) < wiggle(zigzag) / 2)
+        #expect(smooth.points.map(\.speedKPH) == zigzag.points.map(\.speedKPH))
+        let thin = zigzag.thinned(maxPoints: 5)
+        #expect(thin.points.count == 5)
+        #expect(thin.points.first == zigzag.points.first)
+        #expect(thin.points.last == zigzag.points.last)
+    }
+
+    @Test func titles() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        // 18:00 UTC start; a loop that comes back to the start.
+        let start = Date(timeIntervalSince1970: 18 * 3600)
+        var loop = Ride(board: "ow1", points: [
+            RidePoint(time: start, latitude: 40, longitude: -83, speedKPH: 10),
+            RidePoint(time: start + 600, latitude: 40.01, longitude: -83, speedKPH: 10),
+            RidePoint(time: start + 1200, latitude: 40.0005, longitude: -83, speedKPH: 10),
+        ])
+        #expect(loop.title(calendar: utc) == "Evening ride")
+        loop.startPlace = "Alum Creek Park"
+        #expect(loop.title(calendar: utc) == "Evening loop at Alum Creek Park")
+
+        var trip = Ride(board: "ow1", points: [
+            RidePoint(time: start - 10 * 3600, latitude: 40, longitude: -83, speedKPH: 10),
+            RidePoint(time: start - 9 * 3600, latitude: 40.05, longitude: -83, speedKPH: 10),
+        ])
+        trip.startPlace = "Westerville"
+        trip.endPlace = "Columbus"
+        #expect(trip.title(calendar: utc) == "Westerville to Columbus")
+        trip.endPlace = "Westerville"
+        #expect(trip.title(calendar: utc) == "Morning ride in Westerville")
+        trip.customTitle = "Commute"
+        #expect(trip.title(calendar: utc) == "Commute")
+    }
+
+    @Test func energyAndClimb() {
+        // An hour at 200 W out, then an hour at 50 W regen, 10 km in all.
+        var points: [RidePoint] = []
+        for i in 0..<3600 { points.append(RidePoint(time: Date(timeIntervalSince1970: Double(i)), altitude: 100 + Double(i) / 360, speedKPH: 10, watts: 200, motorTempC: 30 + i / 360)) }
+        for i in 3600..<7200 { points.append(RidePoint(time: Date(timeIntervalSince1970: Double(i)), altitude: 110, speedKPH: 10, watts: -50)) }
+        let ride = Ride(board: "ow1", points: points, odometerKm: 10)
+        #expect(abs(ride.energyWh - 200) < 0.2)
+        #expect(abs(ride.regenWh - 50) < 0.2)
+        #expect(abs((ride.whPerKm ?? 0) - 15) < 0.1)
+        #expect(ride.peakWatts == 200)
+        #expect(abs((ride.elevationGainM ?? 0) - 10) < 2)
+        #expect(ride.maxMotorTempC == 39)
+    }
+
     @Test func tooShortToKeep() {
         let ride = Ride(board: "ow1", points: [point(0, lat: 40, speed: 0), point(20, lat: 40, speed: 1)])
         #expect(!ride.isWorthSaving)

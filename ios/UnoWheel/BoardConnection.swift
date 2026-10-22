@@ -124,6 +124,11 @@ final class BoardConnection: NSObject {
         return recorder
     }()
     private(set) var isRecording = false
+
+    func endRide(save: Bool) {
+        recorder.end(save: save)
+        isRecording = recorder.isRecording
+    }
     @ObservationIgnored private var mirrorTask: Task<Void, Never>?
     @ObservationIgnored private var lastTick = Date.now
     @ObservationIgnored private var lastRangeSave = Date.now

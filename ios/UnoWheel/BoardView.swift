@@ -550,7 +550,7 @@ private struct Stat: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value ?? "–")

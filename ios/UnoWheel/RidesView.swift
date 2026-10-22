@@ -7,21 +7,51 @@ struct RidesView: View {
     @Environment(BoardConnection.self) private var connection
     @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
 
+    @State private var confirmingDiscard = false
+
     private var rides: [Ride] { connection.rides.rides(for: connection.boardName) }
 
     var body: some View {
         List {
             if connection.isRecording {
-                Label("Recording", systemImage: "record.circle")
-                    .foregroundStyle(.red)
-                    .symbolEffect(.pulse, options: .repeating)
+                Section {
+                    Label("Recording", systemImage: "record.circle")
+                        .foregroundStyle(.red)
+                        .symbolEffect(.pulse, options: .repeating)
+                    Button("End ride", systemImage: "stop.circle") { connection.endRide(save: true) }
+                    Button("Discard ride", systemImage: "trash", role: .destructive) { confirmingDiscard = true }
+                }
+            }
+            if rides.contains(where: \.hasRoute) {
+                Section {
+                    NavigationLink {
+                        HeatmapView(rides: rides)
+                    } label: {
+                        HeatmapMap(rides: rides, mode: .places, interactive: false)
+                            .frame(height: 150)
+                            .clipShape(.rect(cornerRadius: 14))
+                            .overlay(alignment: .bottomLeading) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "flame.fill").foregroundStyle(.orange)
+                                    Text("Heatmap").foregroundStyle(.white)
+                                }
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(.ultraThinMaterial, in: .capsule)
+                                    .padding(8)
+                            }
+                    }
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             }
             if rides.isEmpty, !connection.isRecording {
                 ContentUnavailableView("No rides yet", systemImage: "map",
                                        description: Text("Rides record on their own once the board moves."))
             }
             ForEach(rides) { ride in
-                NavigationLink(value: ride.id) {
+                NavigationLink {
+                    RideDetailView(ride: ride)
+                } label: {
                     RideRow(ride: ride, useMetric: useMetric)
                 }
             }
@@ -30,15 +60,8 @@ struct RidesView: View {
             }
         }
         .navigationTitle("Rides")
-        #if DEBUG
-        .navigationDestination(isPresented: .constant(CommandLine.arguments.contains("-open-ride") && !rides.isEmpty)) {
-            if let first = rides.first { RideDetailView(ride: first) }
-        }
-        #endif
-        .navigationDestination(for: UUID.self) { id in
-            if let ride = connection.rides.rides.first(where: { $0.id == id }) {
-                RideDetailView(ride: ride)
-            }
+        .confirmationDialog("Discard this ride?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { connection.endRide(save: false) }
         }
     }
 }
@@ -53,11 +76,13 @@ private struct RideRow: View {
                 .frame(width: 56, height: 56)
                 .clipShape(.rect(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 3) {
-                Text(ride.startedAt.formatted(.dateTime.weekday(.wide).hour().minute()))
+                Text(ride.title())
                     .font(.headline)
-                Text("\(formatDistance(ride.distanceKm, metric: useMetric)) · \(formatDuration(ride.duration))")
+                    .lineLimit(1)
+                Text("\(ride.startedAt.formatted(.relative(presentation: .named))) · \(formatDistance(ride.distanceKm, metric: useMetric)) · \(formatDuration(ride.duration))")
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
             Text(formatSpeed(ride.topSpeedKPH, metric: useMetric))
@@ -106,9 +131,19 @@ struct RideDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
     let ride: Ride
+    @State private var renaming = false
+    @State private var draftTitle = ""
+
+    /// The saved copy, so a rename or a place lookup shows up straight away.
+    private var current: Ride { connection.rides.rides.first { $0.id == ride.id } ?? ride }
 
     var body: some View {
         ScrollView {
+            Text(current.startedAt.formatted(date: .complete, time: .shortened))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
             VStack(spacing: 16) {
                 if ride.hasRoute {
                     RideMap(ride: ride)
@@ -116,13 +151,26 @@ struct RideDetailView: View {
                         .clipShape(.rect(cornerRadius: 24))
                 }
                 stats
-                if ride.points.count > 2 { speedChart }
+                if ride.points.count > 2 { RideCharts(ride: ride) }
             }
             .padding()
         }
-        .navigationTitle(ride.startedAt.formatted(date: .abbreviated, time: .shortened))
+        .navigationTitle(current.title())
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Rename ride", isPresented: $renaming) {
+            TextField(current.title(), text: $draftTitle)
+            Button("Save") { connection.rides.rename(current, to: draftTitle) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Leave blank to name it automatically.")
+        }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Rename", systemImage: "pencil") {
+                    draftTitle = current.customTitle ?? ""
+                    renaming = true
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     connection.rides.delete(ride)
@@ -134,93 +182,280 @@ struct RideDetailView: View {
 
     private var stats: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            RideStat(title: "Distance", value: formatDistance(ride.distanceKm, metric: useMetric), icon: "point.topleft.down.to.point.bottomright.curvepath", tint: .blue)
-            RideStat(title: "Time", value: formatDuration(ride.duration), icon: "timer", tint: .purple)
-            RideStat(title: "Top speed", value: formatSpeed(ride.topSpeedKPH, metric: useMetric), icon: "gauge.with.needle.fill", tint: .orange)
-            RideStat(title: "Average", value: formatSpeed(ride.averageMovingKPH, metric: useMetric), icon: "speedometer", tint: .yellow)
+            RideStat(title: "Distance", value: formatDistance(ride.distanceKm, metric: useMetric))
+            RideStat(title: "Time", value: formatDuration(ride.duration))
+            RideStat(title: "Top speed", value: formatSpeed(ride.topSpeedKPH, metric: useMetric))
+            RideStat(title: "Average", value: formatSpeed(ride.averageMovingKPH, metric: useMetric))
             if let used = ride.batteryUsed {
-                RideStat(title: "Battery used", value: "\(used)%", icon: "battery.50percent", tint: .green)
+                RideStat(title: "Battery used", value: "\(used)%")
             }
-            RideStat(title: "Moving", value: formatDuration(ride.movingTime), icon: "figure.skateboarding", tint: .teal)
+            RideStat(title: "Moving", value: formatDuration(ride.movingTime))
+            if ride.hasPower {
+                RideStat(title: "Energy", value: String(format: "%.0f Wh", ride.energyWh))
+                RideStat(title: "Regen", value: String(format: "%.1f Wh", ride.regenWh))
+                if let rate = ride.whPerKm {
+                    RideStat(title: "Efficiency", value: useMetric ? String(format: "%.1f Wh/km", rate) : String(format: "%.1f Wh/mi", rate * 1.609344))
+                }
+                if let peak = ride.peakWatts {
+                    RideStat(title: "Peak power", value: String(format: "%.0f W", peak))
+                }
+            }
+            if let gain = ride.elevationGainM {
+                RideStat(title: "Climbed", value: useMetric ? String(format: "%.0f m", gain) : String(format: "%.0f ft", gain * 3.28084))
+            }
+            if let motor = ride.maxMotorTempC {
+                RideStat(title: "Hottest motor", value: useMetric ? "\(motor) °C" : "\(Int((Double(motor) * 9 / 5 + 32).rounded())) °F")
+            }
+        }
+    }
+}
+
+enum RideChartKind: String, CaseIterable, Identifiable {
+    case speed = "Speed", power = "Power", battery = "Battery", elevation = "Height", temperature = "Heat"
+    var id: String { rawValue }
+}
+
+/// One chart at a time, picked from what this ride actually recorded.
+private struct RideCharts: View {
+    @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
+    let ride: Ride
+    @State private var kind: RideChartKind = .speed
+
+    private var available: [RideChartKind] {
+        RideChartKind.allCases.filter { kind in
+            switch kind {
+            case .speed: true
+            case .power: ride.hasPower
+            case .battery: ride.points.contains { $0.batteryPercent != nil }
+            case .elevation: ride.elevationGainM != nil
+            case .temperature: ride.maxMotorTempC != nil
+            }
         }
     }
 
-    private var speedChart: some View {
-        let factor = useMetric ? 1 : 0.621371
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("Speed").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            Chart(ride.points, id: \.time) { point in
-                AreaMark(x: .value("Time", point.time), y: .value("Speed", point.speedKPH * factor))
-                    .foregroundStyle(.linearGradient(colors: [.orange.opacity(0.35), .orange.opacity(0.02)],
-                                                     startPoint: .top, endPoint: .bottom))
-                    .interpolationMethod(.monotone)
-                LineMark(x: .value("Time", point.time), y: .value("Speed", point.speedKPH * factor))
-                    .foregroundStyle(.orange)
-                    .interpolationMethod(.monotone)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if available.count > 1 {
+                Picker("Chart", selection: $kind) {
+                    ForEach(available) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
-            .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisValueLabel(format: .dateTime.hour().minute()) } }
-            .frame(height: 140)
+            chart.frame(height: 160)
         }
         .padding(16)
         .background(.fill.tertiary, in: .rect(cornerRadius: 20))
     }
+
+    @ViewBuilder private var chart: some View {
+        let points = ride.points
+        switch kind {
+        case .speed:
+            let factor = useMetric ? 1 : 0.621371
+            line(points.map { ($0.time, $0.speedKPH * factor) }, color: .orange, unit: useMetric ? "km/h" : "mph")
+        case .power:
+            // Above zero is drawing power, below is regen.
+            Chart(points.filter { $0.watts != nil }, id: \.time) { point in
+                BarMark(x: .value("Time", point.time), y: .value("Watts", point.watts ?? 0), width: .fixed(1.5))
+                    .foregroundStyle((point.watts ?? 0) < 0 ? Color.green : Color.orange)
+            }
+            .chartYAxisLabel("W")
+            .chartXAxis { timeAxis }
+        case .battery:
+            line(points.compactMap { p in p.batteryPercent.map { (p.time, Double($0)) } }, color: .green, unit: "%")
+        case .elevation:
+            let factor = useMetric ? 1 : 3.28084
+            line(points.compactMap { p in p.altitude.map { (p.time, $0 * factor) } }, color: .blue, unit: useMetric ? "m" : "ft")
+        case .temperature:
+            let convert: (Int) -> Double = { useMetric ? Double($0) : Double($0) * 9 / 5 + 32 }
+            Chart {
+                ForEach(points.filter { $0.motorTempC != nil }, id: \.time) { p in
+                    LineMark(x: .value("Time", p.time), y: .value("Temp", convert(p.motorTempC ?? 0)), series: .value("Part", "Motor"))
+                        .foregroundStyle(by: .value("Part", "Motor"))
+                }
+                ForEach(points.filter { $0.controllerTempC != nil }, id: \.time) { p in
+                    LineMark(x: .value("Time", p.time), y: .value("Temp", convert(p.controllerTempC ?? 0)), series: .value("Part", "Controller"))
+                        .foregroundStyle(by: .value("Part", "Controller"))
+                }
+            }
+            .chartForegroundStyleScale(["Motor": Color.red, "Controller": Color.purple])
+            .chartYAxisLabel(useMetric ? "°C" : "°F")
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartXAxis { timeAxis }
+        }
+    }
+
+    private func line(_ values: [(Date, Double)], color: Color, unit: String) -> some View {
+        Chart(values, id: \.0) { value in
+            AreaMark(x: .value("Time", value.0), y: .value(unit, value.1))
+                .foregroundStyle(.linearGradient(colors: [color.opacity(0.3), color.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                .interpolationMethod(.monotone)
+            LineMark(x: .value("Time", value.0), y: .value(unit, value.1))
+                .foregroundStyle(color)
+                .interpolationMethod(.monotone)
+        }
+        .chartYAxisLabel(unit)
+        .chartYScale(domain: .automatic(includesZero: kind == .speed))
+        .chartXAxis { timeAxis }
+    }
+
+    private var timeAxis: some AxisContent {
+        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+            AxisGridLine()
+            AxisValueLabel(format: .dateTime.hour().minute())
+        }
+    }
 }
 
-/// The route on a map, coloured from green (slow) to red (near top speed).
+/// Speed colours shared by the ride map and the heatmap, slow to fast.
+let speedColors: [Color] = [
+    Color(red: 0.20, green: 0.78, blue: 0.45),
+    Color(red: 0.62, green: 0.85, blue: 0.25),
+    Color(red: 0.98, green: 0.80, blue: 0.20),
+    Color(red: 0.98, green: 0.52, blue: 0.16),
+    Color(red: 0.93, green: 0.23, blue: 0.23),
+]
+
+/// The route on a map: a dark outline under a smoothed line coloured from
+/// green (slow) to red (near top speed).
 private struct RideMap: View {
     let ride: Ride
 
-    private static let colors: [Color] = [.green, .mint, .yellow, .orange, .red]
-
     var body: some View {
-        let segments = ride.speedSegments(bands: Self.colors.count)
+        let smooth = ride.smoothed()
+        let segments = smooth.speedSegments(bands: speedColors.count)
+        let all = smooth.points.compactMap(\.coordinate)
         Map(initialPosition: .automatic, interactionModes: [.pan, .zoom]) {
+            MapPolyline(coordinates: all)
+                .stroke(.black.opacity(0.55), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 MapPolyline(coordinates: segment.points.compactMap(\.coordinate))
-                    .stroke(Self.colors[segment.band], style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    .stroke(speedColors[segment.band], style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
             }
-            if let start = ride.points.first(where: \.hasLocation)?.coordinate {
+            if let start = all.first {
                 Annotation("Start", coordinate: start) {
-                    Circle().fill(.green).stroke(.white, lineWidth: 2).frame(width: 12, height: 12)
+                    Circle().fill(.white).stroke(.black.opacity(0.6), lineWidth: 3).frame(width: 14, height: 14)
                 }
             }
-            if let end = ride.points.last(where: \.hasLocation)?.coordinate {
+            if let end = all.last {
                 Annotation("End", coordinate: end) {
-                    Circle().fill(.red).stroke(.white, lineWidth: 2).frame(width: 12, height: 12)
+                    Image(systemName: "flag.checkered")
+                        .font(.caption.weight(.bold))
+                        .padding(5)
+                        .background(.black.opacity(0.75), in: .circle)
+                        .foregroundStyle(.white)
                 }
             }
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .realistic, emphasis: .muted, pointsOfInterest: .excludingAll))
+        .overlay(alignment: .bottomTrailing) { SpeedLegend().padding(10) }
+    }
+}
+
+private struct SpeedLegend: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("slow")
+            LinearGradient(colors: speedColors, startPoint: .leading, endPoint: .trailing)
+                .frame(width: 60, height: 6)
+                .clipShape(.capsule)
+            Text("fast")
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(.ultraThinMaterial, in: .capsule)
+    }
+}
+
+enum HeatmapMode: String, CaseIterable, Identifiable {
+    case places = "Where", speed = "Speed"
+    var id: String { rawValue }
+}
+
+/// Every ride on one map. "Where" stacks translucent lines so the paths
+/// you ride most glow brightest; "Speed" colours them by how fast you went.
+struct HeatmapMap: View {
+    let rides: [Ride]
+    let mode: HeatmapMode
+    var interactive = true
+
+    var body: some View {
+        let drawn = rides.filter(\.hasRoute).map { $0.thinned(maxPoints: 400).smoothed() }
+        let top = max(drawn.map(\.topSpeedKPH).max() ?? 1, 1)
+        Map(initialPosition: .automatic, interactionModes: interactive ? [.pan, .zoom] : []) {
+            switch mode {
+            case .places:
+                ForEach(drawn) { ride in
+                    MapPolyline(coordinates: ride.points.compactMap(\.coordinate))
+                        .stroke(Color.orange.opacity(0.18), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                    MapPolyline(coordinates: ride.points.compactMap(\.coordinate))
+                        .stroke(Color.yellow.opacity(0.35), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                }
+            case .speed:
+                ForEach(drawn) { ride in
+                    ForEach(Array(ride.speedSegments(bands: speedColors.count, maxKPH: top).enumerated()), id: \.offset) { _, segment in
+                        MapPolyline(coordinates: segment.points.compactMap(\.coordinate))
+                            .stroke(speedColors[segment.band].opacity(0.75), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                    }
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+        .environment(\.colorScheme, .dark)
+        .allowsHitTesting(interactive)
+    }
+}
+
+struct HeatmapView: View {
+    @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
+    let rides: [Ride]
+    @State private var mode: HeatmapMode = .places
+
+    var body: some View {
+        HeatmapMap(rides: rides, mode: mode)
+            .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 10) {
+                    if mode == .speed { SpeedLegend() }
+                    HStack(spacing: 16) {
+                        Label("\(rides.count) rides", systemImage: "figure.skateboarding")
+                        Label(formatDistance(rides.reduce(0) { $0 + $1.distanceKm }, metric: useMetric),
+                              systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    }
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: .capsule)
+                }
+                .padding(.bottom, 24)
+            }
+            .navigationTitle("Heatmap")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Mode", selection: $mode) {
+                        ForEach(HeatmapMode.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
+            }
     }
 }
 
 private struct RideStat: View {
     let title: String
     let value: String
-    let icon: String
-    let tint: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
+            Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .labelStyle(TintedIconLabel(tint: tint))
             Text(value).font(.title3.weight(.semibold).monospacedDigit())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(.fill.tertiary, in: .rect(cornerRadius: 16))
-    }
-}
-
-private struct TintedIconLabel: LabelStyle {
-    let tint: Color
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 5) {
-            configuration.icon.foregroundStyle(tint)
-            configuration.title
-        }
     }
 }
 

@@ -16,7 +16,37 @@ final class RideStore {
         return url
     }()
 
-    init() { reload() }
+    init() {
+        reload()
+        Task { await nameUnnamedRides() }
+    }
+
+    func rename(_ ride: Ride, to title: String) {
+        var copy = ride
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.customTitle = trimmed.isEmpty ? nil : trimmed
+        save(copy)
+    }
+
+    /// Looks up where rides started and ended, for their titles. Apple
+    /// rate-limits geocoding, so this goes one ride at a time.
+    func nameUnnamedRides() async {
+        for ride in rides where ride.startPlace == nil && ride.hasRoute {
+            var copy = ride
+            copy.startPlace = await Self.place(for: ride.points.first(where: \.hasLocation))
+            copy.endPlace = await Self.place(for: ride.points.last(where: \.hasLocation))
+            guard copy.startPlace != nil else { continue }
+            save(copy)
+        }
+    }
+
+    /// The most specific useful name: a park or landmark, then the
+    /// neighbourhood, then the town.
+    private static func place(for point: RidePoint?) async -> String? {
+        guard let lat = point?.latitude, let lon = point?.longitude else { return nil }
+        let placemark = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: lat, longitude: lon)).first
+        return placemark?.areasOfInterest?.first ?? placemark?.subLocality ?? placemark?.locality
+    }
 
     func reload() {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
@@ -57,6 +87,9 @@ final class RideRecorder: NSObject {
     private var lastMoving = Date.distantPast
     private var lastLocation: CLLocation?
     private var lastSample = Date.distantPast
+    /// After you end a ride by hand, wait for the board to stop before
+    /// starting another, so it doesn't restart mid-roll.
+    private var holdUntilStopped = false
     private let manager = CLLocationManager()
     private var backgroundSession: CLBackgroundActivitySession?
     private var updating = false
@@ -96,9 +129,10 @@ final class RideRecorder: NSObject {
         lastSample = now
         let speed = t.speedKPH ?? 0
         if speed >= 2 { lastMoving = now }
+        if speed < 2 { holdUntilStopped = false }
 
         if current == nil {
-            guard speed >= 3 else { return }
+            guard speed >= 3, !holdUntilStopped else { return }
             start(board: board, telemetry: t, now: now)
         }
         guard var ride = current else { return }
@@ -108,12 +142,28 @@ final class RideRecorder: NSObject {
                                      longitude: location?.coordinate.longitude,
                                      altitude: location?.altitude,
                                      speedKPH: speed,
-                                     batteryPercent: t.batteryPercent))
+                                     batteryPercent: t.batteryPercent,
+                                     watts: t.usesModernTelemetry ? t.powerWatts
+                                         : t.currentAmps.flatMap { amps in t.batteryVoltage.map { amps * $0 } },
+                                     motorTempC: t.motorTemperatureC,
+                                     controllerTempC: t.controllerTemperatureC))
         if let start = tripStart, let trip = t.tripRevolutions, trip >= start {
             ride.odometerKm = Double(trip - start) * t.model.wheelCircumferenceMM / 1_000_000
         }
         current = ride
         if now.timeIntervalSince(lastMoving) > Self.stopTimeout { finish() }
+    }
+
+    /// Ends the current ride now. Discarding throws it away.
+    func end(save: Bool) {
+        holdUntilStopped = true
+        if save {
+            finish()
+        } else {
+            stopLocation()
+            current = nil
+            log("ride discarded")
+        }
     }
 
     func finish() {
@@ -130,6 +180,7 @@ final class RideRecorder: NSObject {
         }
         store.save(ride)
         log(String(format: "ride saved: %.2f km", ride.distanceKm))
+        Task { await store.nameUnnamedRides() }
     }
 
     private func start(board: String, telemetry t: Telemetry, now: Date) {

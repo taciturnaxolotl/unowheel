@@ -339,7 +339,7 @@ struct StatRow: View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(tint)
+                .foregroundStyle(.secondary)
                 .frame(width: 16)
             Text(text)
                 .font(.subheadline.weight(.medium).monospacedDigit())
