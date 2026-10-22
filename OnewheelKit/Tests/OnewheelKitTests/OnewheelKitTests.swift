@@ -248,6 +248,50 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
     }
 }
 
+@Suite struct RideTests {
+    func point(_ second: Double, lat: Double, speed: Double, battery: Int = 80) -> RidePoint {
+        RidePoint(time: Date(timeIntervalSince1970: second), latitude: lat, longitude: -83.0,
+                  speedKPH: speed, batteryPercent: battery)
+    }
+
+    @Test func gpsDistanceAndTime() {
+        // 0.001 degrees of latitude is about 111 m.
+        let ride = Ride(board: "ow1", points: (0...10).map { point(Double($0), lat: 40 + Double($0) * 0.001, speed: 20) })
+        #expect(abs(ride.gpsKm - 1.112) < 0.01)
+        #expect(ride.duration == 10)
+        #expect(ride.movingTime == 10)
+        #expect(ride.isWorthSaving)
+    }
+
+    @Test func prefersOdometer() {
+        var ride = Ride(board: "ow1", points: [point(0, lat: 40, speed: 10), point(60, lat: 40.01, speed: 10)])
+        ride.odometerKm = 0.9
+        #expect(ride.distanceKm == 0.9)
+    }
+
+    @Test func batteryAndTop() {
+        let ride = Ride(board: "ow1", points: [point(0, lat: 40, speed: 5, battery: 90),
+                                               point(1, lat: 40.001, speed: 24, battery: 88),
+                                               point(2, lat: 40.002, speed: 3, battery: 85)])
+        #expect(ride.topSpeedKPH == 24)
+        #expect(ride.batteryUsed == 5)
+    }
+
+    @Test func segmentsJoinWithoutGaps() {
+        let speeds: [Double] = [2, 3, 20, 21, 22, 4]
+        let ride = Ride(board: "ow1", points: speeds.enumerated().map { point(Double($0.offset), lat: 40 + Double($0.offset) * 0.001, speed: $0.element) })
+        let segments = ride.speedSegments(bands: 2, maxKPH: 24)
+        #expect(segments.map(\.band) == [0, 1, 0])
+        #expect(segments[1].points.first == segments[0].points.last)
+        #expect(segments[2].points.first == segments[1].points.last)
+    }
+
+    @Test func tooShortToKeep() {
+        let ride = Ride(board: "ow1", points: [point(0, lat: 40, speed: 0), point(20, lat: 40, speed: 1)])
+        #expect(!ride.isWorthSaving)
+    }
+}
+
 @Suite struct RangeTests {
     func pint(battery: Int, rpm: Int = 0, watts: Int = 0) -> Telemetry {
         var t = Telemetry()

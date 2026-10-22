@@ -9,6 +9,7 @@ struct BoardView: View {
     @State private var renaming = false
     @State private var draftName = ""
     @State private var addingBoard = false
+    @State private var showingRides = CommandLine.arguments.contains("-open-rides")
 
     private var t: Telemetry { connection.shown }
 
@@ -34,6 +35,16 @@ struct BoardView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) { boardPicker }
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showingRides = true
+                } label: {
+                    Image(systemName: connection.isRecording ? "record.circle" : "map")
+                        .foregroundStyle(connection.isRecording ? .red : .primary)
+                        .symbolEffect(.pulse, options: .repeating, isActive: connection.isRecording)
+                }
+                .accessibilityLabel("Rides")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Rename board", systemImage: "pencil") {
@@ -70,6 +81,7 @@ struct BoardView: View {
         .sheet(isPresented: $showingLog) {
             LogView()
         }
+        .navigationDestination(isPresented: $showingRides) { RidesView() }
         .sheet(isPresented: $addingBoard) {
             NavigationStack {
                 ScannerView(onPick: { addingBoard = false })

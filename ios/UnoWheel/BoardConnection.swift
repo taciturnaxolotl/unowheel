@@ -117,6 +117,13 @@ final class BoardConnection: NSObject {
     /// connects, so the other board doesn't win the race.
     @ObservationIgnored private var pinned = false
     @ObservationIgnored private let mirror = RideMirror()
+    let rides = RideStore()
+    @ObservationIgnored private lazy var recorder: RideRecorder = {
+        let recorder = RideRecorder(store: rides)
+        recorder.log = { [weak self] line in self?.record(line) }
+        return recorder
+    }()
+    private(set) var isRecording = false
     @ObservationIgnored private var mirrorTask: Task<Void, Never>?
     @ObservationIgnored private var lastTick = Date.now
     @ObservationIgnored private var lastRangeSave = Date.now
@@ -151,6 +158,8 @@ final class BoardConnection: NSObject {
         let now = Date.now
         let elapsed = now.timeIntervalSince(lastTick)
         lastTick = now
+        recorder.update(board: boardName, telemetry: telemetry, live: isLive, now: now)
+        if isRecording != recorder.isRecording { isRecording = recorder.isRecording }
         guard isConnected else { return }
         if phase == .unlocked { voltage.record(telemetry, at: now) }
         if phase == .unlocked, telemetry.isCharging, let percent = telemetry.batteryPercent {
@@ -286,6 +295,22 @@ final class BoardConnection: NSObject {
             }
             chargeSession = session
         }
+        if CommandLine.arguments.contains("-rides"), rides.rides.isEmpty {
+            // A loop around a park, faster on the straights.
+            let start = Date.now.addingTimeInterval(-3 * 3600)
+            var points: [RidePoint] = []
+            for i in 0..<900 {
+                let a = Double(i) / 900 * 2 * .pi
+                let speed = 12 + 10 * abs(sin(a * 2))
+                points.append(RidePoint(time: start.addingTimeInterval(Double(i) * 2),
+                                        latitude: 40.1265 + 0.004 * sin(a), longitude: -82.9290 + 0.006 * cos(a),
+                                        speedKPH: speed, batteryPercent: 88 - i / 30))
+            }
+            rides.save(Ride(board: "ow292642", points: points, odometerKm: 3.2))
+            var second = points.prefix(300).map { $0 }
+            for j in second.indices { second[j].time = second[j].time.addingTimeInterval(-86400) }
+            rides.save(Ride(board: "ow292642", points: second, odometerKm: 1.1))
+        }
         if CommandLine.arguments.contains("-offline") {
             t.rpm = nil
             t.powerWatts = nil
@@ -378,6 +403,7 @@ final class BoardConnection: NSObject {
     /// auto-connect for this visit only.
     func appBecameActive() {
         defer { backgroundedAt = nil }
+        if boardName != nil { recorder.requestPermissionIfNeeded() }
         guard let since = backgroundedAt, Date.now.timeIntervalSince(since) > 120, autoConnectPaused else { return }
         autoConnectPaused = false
         if peripheral == nil { armAutoConnect() }
@@ -847,7 +873,12 @@ extension BoardConnection: @preconcurrency CBPeripheralDelegate {
             return
         }
 
-        if phase == .unlocked { telemetry.apply(characteristic, data: data) }
+        if phase == .unlocked {
+            telemetry.apply(characteristic, data: data)
+            // Board notifications keep arriving with the phone locked, unlike
+            // timers, so they drive ride sampling too.
+            recorder.update(board: boardName, telemetry: telemetry, live: true)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor cb: CBCharacteristic, error: Error?) {
