@@ -348,6 +348,17 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(ride.maxMotorTempC == 39)
     }
 
+    @Test func climbPrefersBarometer() {
+        // GPS bounces 8 m on flat ground; the barometer sees a 5 m rise.
+        let points = (0..<20).map { i in
+            RidePoint(time: Date(timeIntervalSince1970: Double(i)), altitude: 100 + (i.isMultiple(of: 2) ? 8 : 0),
+                      speedKPH: 10, climbM: Double(i) / 4)
+        }
+        #expect(abs((Ride(board: "ow1", points: points).elevationGainM ?? 0) - 4) < 0.01)
+        let gpsOnly = points.map { var p = $0; p.climbM = nil; return p }
+        #expect((Ride(board: "ow1", points: gpsOnly).elevationGainM ?? 0) > 50)
+    }
+
     private func fix(_ t: Double, _ lat: Double, _ speed: Double) -> RidePoint {
         RidePoint(time: Date(timeIntervalSince1970: t), latitude: lat, longitude: -83, speedKPH: speed)
     }

@@ -318,6 +318,7 @@
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "UnoWheel talks to your Onewheel over Bluetooth to unlock it and show live ride data.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Lets UnoWheel map a ride even when your board connects with the phone in your pocket.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "UnoWheel maps your rides while a board is connected.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "UnoWheel uses the barometer to measure how much you climb on a ride.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -427,6 +428,7 @@
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "UnoWheel talks to your Onewheel over Bluetooth to unlock it and show live ride data.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Lets UnoWheel map a ride even when your board connects with the phone in your pocket.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "UnoWheel maps your rides while a board is connected.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "UnoWheel uses the barometer to measure how much you climb on a ride.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

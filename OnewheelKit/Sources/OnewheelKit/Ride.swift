@@ -16,10 +16,14 @@ public struct RidePoint: Codable, Equatable, Sendable {
     public var batteryTempC: Int?
     /// Pack voltage; it sags under load, more so in the cold and as cells age.
     public var volts: Double?
+    /// Height from the phone's barometer, relative to where the ride began.
+    /// Far steadier than GPS altitude, and kept when the GPS fix is dropped.
+    public var climbM: Double?
 
     public init(time: Date, latitude: Double? = nil, longitude: Double? = nil, altitude: Double? = nil,
                 speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
-                motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil) {
+                motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil,
+                climbM: Double? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
@@ -31,6 +35,7 @@ public struct RidePoint: Codable, Equatable, Sendable {
         self.controllerTempC = controllerTempC
         self.batteryTempC = batteryTempC
         self.volts = volts
+        self.climbM = climbM
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
@@ -143,9 +148,11 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
             ?? weather?.temperatureC
     }
 
-    /// Metres climbed, ignoring GPS altitude wobble under 2 m.
+    /// Metres climbed, from the barometer when the ride has it, else GPS
+    /// altitude. Wobble under 2 m is ignored.
     public var elevationGainM: Double? {
-        let altitudes = points.compactMap(\.altitude)
+        let barometric = points.compactMap(\.climbM)
+        let altitudes = barometric.count > 1 ? barometric : points.compactMap(\.altitude)
         guard altitudes.count > 1 else { return nil }
         var gain = 0.0
         var anchor = altitudes[0]

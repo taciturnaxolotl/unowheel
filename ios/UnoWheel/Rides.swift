@@ -1,4 +1,5 @@
 import CoreLocation
+import CoreMotion
 import Foundation
 import Observation
 import OnewheelKit
@@ -112,6 +113,9 @@ final class RideRecorder: NSObject {
     private var tripStart: Int?
     private var lastMoving = Date.distantPast
     private var lastLocation: CLLocation?
+    private let altimeter = CMAltimeter()
+    /// Latest barometric height since the ride began, in metres.
+    private var climb: Double?
     private var lastSample = Date.distantPast
     /// After you end a ride by hand, wait for the board to stop before
     /// starting another, so it doesn't restart mid-roll.
@@ -176,7 +180,8 @@ final class RideRecorder: NSObject {
                                      motorTempC: t.motorTemperatureC,
                                      controllerTempC: t.controllerTemperatureC,
                                      batteryTempC: t.batteryTemperatureC,
-                                     volts: volts))
+                                     volts: volts,
+                                     climbM: climb))
         // The trip counter can arrive a moment after the ride starts.
         if tripStart == nil { tripStart = t.tripRevolutions }
         if let start = tripStart, let trip = t.tripRevolutions, trip >= start {
@@ -222,6 +227,17 @@ final class RideRecorder: NSObject {
         lastMoving = now
         log("ride started")
         startLocation()
+        startAltimeter()
+    }
+
+    /// Relative height needs Motion & Fitness access, asked on the first
+    /// ride. Without a barometer or access, climb falls back to GPS.
+    private func startAltimeter() {
+        guard CMAltimeter.isRelativeAltitudeAvailable(), CMAltimeter.authorizationStatus() != .denied else { return }
+        altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, _ in
+            guard let data else { return }
+            MainActor.assumeIsolated { self?.climb = data.relativeAltitude.doubleValue }
+        }
     }
 
     private func startLocation() {
@@ -253,6 +269,8 @@ final class RideRecorder: NSObject {
     }
 
     private func stopLocation() {
+        altimeter.stopRelativeAltitudeUpdates()
+        climb = nil
         updating = false
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
