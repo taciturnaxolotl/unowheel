@@ -280,13 +280,13 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
     @Test func segmentsJoinWithoutGaps() {
         let speeds: [Double] = [2, 3, 20, 21, 22, 4]
         let ride = Ride(board: "ow1", points: speeds.enumerated().map { point(Double($0.offset), lat: 40 + Double($0.offset) * 0.001, speed: $0.element) })
-        let segments = ride.speedSegments(bands: 2, maxKPH: 24)
+        let segments = ride.speedSegments(bands: 2)
         #expect(segments.map(\.band) == [0, 1, 0])
         #expect(segments[1].points.first == segments[0].points.last)
         #expect(segments[2].points.first == segments[1].points.last)
     }
 
-    @Test func smoothingAndThinning() {
+    @Test func smoothing() {
         // A straight line with every other point nudged sideways.
         let zigzag = Ride(board: "ow1", points: (0..<20).map { i in
             RidePoint(time: Date(timeIntervalSince1970: Double(i)), latitude: 40 + Double(i) * 0.001,
@@ -296,10 +296,6 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         let wiggle = { (r: Ride) in r.points.compactMap(\.longitude).map { abs($0 + 83) }.max() ?? 0 }
         #expect(wiggle(smooth) < wiggle(zigzag) / 2)
         #expect(smooth.points.map(\.speedKPH) == zigzag.points.map(\.speedKPH))
-        let thin = zigzag.thinned(maxPoints: 5)
-        #expect(thin.points.count == 5)
-        #expect(thin.points.first == zigzag.points.first)
-        #expect(thin.points.last == zigzag.points.last)
     }
 
     @Test func titles() {
@@ -341,6 +337,56 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(ride.peakWatts == 200)
         #expect(abs((ride.elevationGainM ?? 0) - 10) < 2)
         #expect(ride.maxMotorTempC == 39)
+    }
+
+    private func fix(_ t: Double, _ lat: Double, _ speed: Double) -> RidePoint {
+        RidePoint(time: Date(timeIntervalSince1970: t), latitude: lat, longitude: -83, speedKPH: speed)
+    }
+
+    @Test func dropsFixesWhileCarried() {
+        var points = (0..<6).map { fix(Double($0), 40 + Double($0) * 0.00003, 10) }
+        points += (6..<12).map { fix(Double($0), 40.0002 + Double($0) * 0.000001, 0) }
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[0..<10].allSatisfy { $0.hasLocation })
+        #expect(clean.points[10..<12].allSatisfy { !$0.hasLocation })
+    }
+
+    @Test func dropsFrozenFixes() {
+        var points = (0..<10).map { fix(Double($0), 40 + Double($0) * 0.00003, 10) }
+        points += (10..<15).map { fix(Double($0), 40.0003, 10) }   // frozen: all stale
+        points += (15..<17).map { fix(Double($0), 40.0005, 10) }   // brief repeat: keep the first
+        points += (17..<25).map { fix(Double($0), 40 + Double($0) * 0.00003, 10) }
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[10..<15].allSatisfy { !$0.hasLocation })
+        #expect(clean.points[15].hasLocation)
+        #expect(!clean.points[16].hasLocation)
+        #expect(clean.points[17].hasLocation)
+    }
+
+    @Test func dropsStrandedFixesButTrustsLongGaps() {
+        var points = (0..<3).map { fix(Double($0), 40.01 + Double($0) * 0.00003, 10) }  // ~1 km off
+        points += (3..<18).map { fix(Double($0), 40 + Double($0) * 0.00003, 10) }
+        points += (40..<45).map { fix(Double($0), 40.02 + Double($0) * 0.00003, 10) } // after a long gap
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[0..<3].allSatisfy { !$0.hasLocation })
+        #expect(clean.points[3...].allSatisfy { $0.hasLocation })
+    }
+
+    @Test func cleansIndoorFixes() {
+        func p(_ t: Double, _ lat: Double, _ speed: Double) -> RidePoint {
+            RidePoint(time: Date(timeIntervalSince1970: t), latitude: lat, longitude: -83, speedKPH: speed)
+        }
+        var points = [p(0, 40.0100, 10), p(1, 40.0100, 10), p(2, 40.0101, 10)]   // bad first fixes, ~1 km off
+        points += (3..<20).map { p(Double($0), 40 + Double($0) * 0.00003, 10) } // the real ride
+        points += (20..<30).map { p(Double($0), 40.0006, 5) }                   // GPS freezes going round a building
+        points.append(p(30, 40.0010, 0.1))                                      // catches up as you stop
+        points.append(p(40, 40.0040, 0))                                        // carried inside
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(!clean.points[0].hasLocation)
+        #expect(clean.points[5].hasLocation)
+        #expect(clean.points[20..<30].allSatisfy { !$0.hasLocation })
+        #expect(clean.points[30].hasLocation)
+        #expect(!clean.points[31].hasLocation)
     }
 
     @Test func tooShortToKeep() {

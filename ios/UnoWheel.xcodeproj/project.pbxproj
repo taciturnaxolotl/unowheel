@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */; };
 		1DBF9680D7DB454EBDB042E1 /* UnlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D6FFB153009A78C10A5037 /* UnlockView.swift */; };
+		4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */; };
+		4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */; };
 		5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */; };
 		5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C9A433C252BB5503D037ED /* BatteryWidget.swift */; };
 		6025C73120A6FEF4F83685A6 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
@@ -55,10 +57,12 @@
 
 /* Begin PBXFileReference section */
 		0364371C96C897D459F19C13 /* OnewheelKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OnewheelKit; path = ../OnewheelKit; sourceTree = SOURCE_ROOT; };
+		075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapOverlay.swift; sourceTree = "<group>"; };
 		09FAB40A1A7E79280B636C47 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
 		0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Waiters.swift; sourceTree = "<group>"; };
 		1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelWidgets.swift; sourceTree = "<group>"; };
 		13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideLiveActivity.swift; sourceTree = "<group>"; };
+		26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatRaster.swift; sourceTree = "<group>"; };
 		35665AD7D2A6745907345188 /* Rides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rides.swift; sourceTree = "<group>"; };
 		3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = UnoWheelWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D1A24D60E710982DA6A0D80 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
@@ -119,6 +123,8 @@
 				44C36F41820D5863016AC6E8 /* Assets.xcassets */,
 				EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */,
 				09FAB40A1A7E79280B636C47 /* BoardView.swift */,
+				075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */,
+				26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */,
 				5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */,
 				35665AD7D2A6745907345188 /* Rides.swift */,
 				A4B104B5E09107FDD9FA58D5 /* RidesView.swift */,
@@ -266,6 +272,8 @@
 			files = (
 				D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */,
 				95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */,
+				4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */,
+				4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */,
 				D6FDBA1B7CFD90CD63788064 /* LightsIntent.swift in Sources */,
 				0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */,
 				E9BA92E7A3D54F1137B366E0 /* Rides.swift in Sources */,

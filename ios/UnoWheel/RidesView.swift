@@ -27,7 +27,7 @@ struct RidesView: View {
                     NavigationLink {
                         HeatmapView(rides: rides)
                     } label: {
-                        HeatmapMap(rides: rides, mode: .places, interactive: false)
+                        HeatmapMap(rides: rides, interactive: false)
                             .frame(height: 150)
                             .clipShape(.rect(cornerRadius: 14))
                             .overlay(alignment: .bottomLeading) {
@@ -93,28 +93,23 @@ private struct RideRow: View {
     }
 }
 
-/// The route drawn as a line, scaled to fit, without a map underneath.
+/// The route as a bare line, scaled to fit, in the map's projection so
+/// it matches the ride's map.
 private struct RouteThumbnail: View {
     let ride: Ride
+    private let inset: CGFloat = 8
+    private let minSpanMetres = 5.0
 
     var body: some View {
         Canvas { context, size in
-            let located = ride.points.compactMap { p -> CGPoint? in
-                guard let lat = p.latitude, let lon = p.longitude else { return nil }
-                return CGPoint(x: lon, y: lat)
-            }
-            guard located.count > 1,
-                  let minX = located.map(\.x).min(), let maxX = located.map(\.x).max(),
-                  let minY = located.map(\.y).min(), let maxY = located.map(\.y).max() else { return }
-            let span = max(maxX - minX, maxY - minY, 0.0001)
-            let inset: CGFloat = 8
-            let scale = (min(size.width, size.height) - inset * 2) / span
+            guard let track = HeatRaster.Track(ride: ride) else { return }
+            let rect = track.rect
+            let minSpan = minSpanMetres * MKMapPointsPerMeterAtLatitude(track.points[0].coordinate.latitude)
+            let scale = (min(size.width, size.height) - inset * 2) / max(rect.width, rect.height, minSpan)
+            let offsetX = (size.width - rect.width * scale) / 2
+            let offsetY = (size.height - rect.height * scale) / 2
             var path = Path()
-            for (i, p) in located.enumerated() {
-                let point = CGPoint(x: inset + (p.x - minX) * scale + (size.width - inset * 2 - (maxX - minX) * scale) / 2,
-                                    y: size.height - inset - (p.y - minY) * scale - (size.height - inset * 2 - (maxY - minY) * scale) / 2)
-                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
-            }
+            path.addLines(track.points.map { CGPoint(x: offsetX + ($0.x - rect.minX) * scale, y: offsetY + ($0.y - rect.minY) * scale) })
             context.stroke(path, with: .color(.orange), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
         .background(.fill.tertiary)
@@ -307,7 +302,7 @@ private struct RideCharts: View {
     }
 }
 
-/// Speed colours shared by the ride map and the heatmap, slow to fast.
+/// Speed colours for the ride map, slow to fast.
 let speedColors: [Color] = [
     Color(red: 0.20, green: 0.78, blue: 0.45),
     Color(red: 0.62, green: 0.85, blue: 0.25),
@@ -367,56 +362,33 @@ private struct SpeedLegend: View {
     }
 }
 
-enum HeatmapMode: String, CaseIterable, Identifiable {
-    case places = "Where", speed = "Speed"
-    var id: String { rawValue }
-}
-
-/// Every ride on one map. "Where" stacks translucent lines so the paths
-/// you ride most glow brightest; "Speed" colours them by how fast you went.
+/// Every ride on one map. The more rides along a path, the hotter it glows.
 struct HeatmapMap: View {
     let rides: [Ride]
-    let mode: HeatmapMode
     var interactive = true
 
+    @State private var overlay: HeatmapOverlay?
+
     var body: some View {
-        let drawn = rides.filter(\.hasRoute).map { $0.thinned(maxPoints: 400).smoothed() }
-        let top = max(drawn.map(\.topSpeedKPH).max() ?? 1, 1)
-        Map(initialPosition: .automatic, interactionModes: interactive ? [.pan, .zoom] : []) {
-            switch mode {
-            case .places:
-                ForEach(drawn) { ride in
-                    MapPolyline(coordinates: ride.points.compactMap(\.coordinate))
-                        .stroke(Color.orange.opacity(0.18), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
-                    MapPolyline(coordinates: ride.points.compactMap(\.coordinate))
-                        .stroke(Color.yellow.opacity(0.35), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                }
-            case .speed:
-                ForEach(drawn) { ride in
-                    ForEach(Array(ride.speedSegments(bands: speedColors.count, maxKPH: top).enumerated()), id: \.offset) { _, segment in
-                        MapPolyline(coordinates: segment.points.compactMap(\.coordinate))
-                            .stroke(speedColors[segment.band].opacity(0.75), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                    }
-                }
+        HeatmapMapView(overlay: overlay, interactive: interactive)
+            .allowsHitTesting(interactive)
+            .task(id: rides.map(\.id)) {
+                let rides = rides
+                overlay = await Task.detached(priority: .userInitiated) { HeatmapOverlay(rides: rides) }.value
             }
-        }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .environment(\.colorScheme, .dark)
-        .allowsHitTesting(interactive)
     }
 }
 
 struct HeatmapView: View {
     @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
     let rides: [Ride]
-    @State private var mode: HeatmapMode = .places
 
     var body: some View {
-        HeatmapMap(rides: rides, mode: mode)
+        HeatmapMap(rides: rides)
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .bottom) {
                 VStack(spacing: 10) {
-                    if mode == .speed { SpeedLegend() }
+                    FrequencyLegend()
                     HStack(spacing: 16) {
                         Label("\(rides.count) rides", systemImage: "figure.skateboarding")
                         Label(formatDistance(rides.reduce(0) { $0 + $1.distanceKm }, metric: useMetric),
@@ -430,15 +402,23 @@ struct HeatmapView: View {
             }
             .navigationTitle("Heatmap")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Mode", selection: $mode) {
-                        ForEach(HeatmapMode.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 180)
-                }
-            }
+    }
+}
+
+private struct FrequencyLegend: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("1 ride")
+            LinearGradient(stops: HeatRaster.ramp.dropFirst().map {
+                Gradient.Stop(color: Color(red: $0.red, green: $0.green, blue: $0.blue), location: $0.t)
+            }, startPoint: .leading, endPoint: .trailing)
+                .frame(width: 60, height: 6)
+                .clipShape(.capsule)
+            Text("most")
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(.ultraThinMaterial, in: .capsule)
     }
 }
 

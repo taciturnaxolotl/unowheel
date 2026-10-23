@@ -29,6 +29,12 @@ public struct RidePoint: Codable, Equatable, Sendable {
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
+
+    mutating func dropLocation() {
+        latitude = nil
+        longitude = nil
+        altitude = nil
+    }
 }
 
 /// A recorded ride, and the numbers worth showing about it.
@@ -62,7 +68,7 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var movingTime: TimeInterval {
         zip(points, points.dropFirst()).reduce(0) { total, pair in
             let gap = pair.1.time.timeIntervalSince(pair.0.time)
-            return pair.0.speedKPH >= 2 && gap < 10 ? total + gap : total
+            return pair.0.speedKPH >= Self.movingKPH && gap < 10 ? total + gap : total
         }
     }
 
@@ -159,10 +165,10 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     /// Runs of consecutive located points that share a speed band, for
     /// drawing the route coloured by speed. Neighbouring runs share their
     /// joining point so the line has no gaps.
-    public func speedSegments(bands: Int = 5, maxKPH: Double? = nil) -> [(band: Int, points: [RidePoint])] {
+    public func speedSegments(bands: Int = 5) -> [(band: Int, points: [RidePoint])] {
         let located = points.filter(\.hasLocation)
         guard located.count >= 2 else { return [] }
-        let top = max(maxKPH ?? topSpeedKPH, 1)
+        let top = max(topSpeedKPH, 1)
         func band(_ p: RidePoint) -> Int { min(bands - 1, Int(p.speedKPH / top * Double(bands))) }
         var segments: [(band: Int, points: [RidePoint])] = []
         for point in located {
@@ -175,6 +181,81 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
             }
         }
         return segments.filter { $0.points.count >= 2 }
+    }
+
+    /// Drops GPS fixes that can't be part of the ride, keeping board data
+    /// for every point. Tuned on real rides that went in and out of buildings.
+    public func cleanedRoute() -> Ride {
+        droppingCarriedFixes().droppingFrozenFixes().droppingStrandedFixes()
+    }
+
+    /// Below this the board is standing still, or being carried.
+    public static let movingKPH = 2.0
+    private static let carriedAfter: TimeInterval = 3
+    private static let frozenRun = 4
+    private static let trustedJumpGap: TimeInterval = 10
+    private static let jumpSlack = 1.5
+    private static let jumpToleranceKm = 0.05
+    private static let strandedRun = 10
+
+    /// Fixes once the board has been still for a few seconds: it's being
+    /// carried inside. The first stopped fixes are kept; that's where you stopped.
+    private func droppingCarriedFixes() -> Ride {
+        var copy = self
+        var stillSince: Date?
+        for i in copy.points.indices {
+            guard copy.points[i].speedKPH < Self.movingKPH else {
+                stillSince = nil
+                continue
+            }
+            let since = stillSince ?? copy.points[i].time
+            stillSince = since
+            if copy.points[i].time.timeIntervalSince(since) > Self.carriedAfter { copy.points[i].dropLocation() }
+        }
+        return copy
+    }
+
+    /// iOS keeps reporting the last fix when it loses the sky. A coordinate
+    /// held for several samples is stale throughout; a brief repeat keeps its first.
+    private func droppingFrozenFixes() -> Ride {
+        var copy = self
+        let runs = locatedRuns { a, b in points[a].latitude != points[b].latitude || points[a].longitude != points[b].longitude }
+        for run in runs {
+            (run.count >= Self.frozenRun ? run[...] : run.dropFirst()).forEach { copy.points[$0].dropLocation() }
+        }
+        return copy
+    }
+
+    /// A short run cut off from the rest by a jump the board couldn't have
+    /// made, like the first fixes after stepping outside. After a long gap
+    /// in fixes a jump is expected, so it's trusted.
+    private func droppingStrandedFixes() -> Ride {
+        let runs = locatedRuns { a, b in
+            let seconds = points[b].time.timeIntervalSince(points[a].time)
+            let fastest = points[a...b].map(\.speedKPH).max() ?? 0
+            let reachableKm = fastest * max(seconds, 1) / 3600 * Self.jumpSlack + Self.jumpToleranceKm
+            return seconds < Self.trustedJumpGap && Self.haversineKm(points[a], points[b]) > reachableKm
+        }
+        let longest = runs.map(\.count).max() ?? 0
+        var copy = self
+        for run in runs where run.count < longest && run.count < Self.strandedRun {
+            run.forEach { copy.points[$0].dropLocation() }
+        }
+        return copy
+    }
+
+    /// Indices of located points in runs; a new run starts wherever
+    /// `breaks(previous, next)` is true.
+    private func locatedRuns(breakingWhere breaks: (Int, Int) -> Bool) -> [[Int]] {
+        var runs: [[Int]] = []
+        for i in points.indices where points[i].hasLocation {
+            if let last = runs.last?.last, !breaks(last, i) {
+                runs[runs.count - 1].append(i)
+            } else {
+                runs.append([i])
+            }
+        }
+        return runs
     }
 
     /// GPS jitters a few metres; a short moving average makes the line
@@ -190,17 +271,6 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
             copy.points[entry.offset].latitude = slice.compactMap(\.latitude).reduce(0, +) / Double(slice.count)
             copy.points[entry.offset].longitude = slice.compactMap(\.longitude).reduce(0, +) / Double(slice.count)
         }
-        return copy
-    }
-
-    /// Keeps at most `maxPoints` located points, evenly spaced, for drawing
-    /// many rides at once.
-    public func thinned(maxPoints: Int) -> Ride {
-        let located = points.filter(\.hasLocation)
-        guard located.count > maxPoints, maxPoints > 1 else { return self }
-        let step = Double(located.count - 1) / Double(maxPoints - 1)
-        var copy = self
-        copy.points = (0..<maxPoints).map { located[Int((Double($0) * step).rounded())] }
         return copy
     }
 

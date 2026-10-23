@@ -3,7 +3,8 @@ import Foundation
 import Observation
 import OnewheelKit
 
-/// Rides saved as one JSON file each, newest first.
+/// Rides saved as one JSON file each, newest first. Files keep the raw
+/// GPS; `rides` holds cleaned routes, so the cleanup can be retuned later.
 @MainActor
 @Observable
 final class RideStore {
@@ -22,21 +23,20 @@ final class RideStore {
     }
 
     func rename(_ ride: Ride, to title: String) {
-        var copy = ride
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        copy.customTitle = trimmed.isEmpty ? nil : trimmed
-        save(copy)
+        update(ride.id) { $0.customTitle = trimmed.isEmpty ? nil : trimmed }
     }
 
     /// Looks up where rides started and ended, for their titles. Apple
     /// rate-limits geocoding, so this goes one ride at a time.
     func nameUnnamedRides() async {
         for ride in rides where ride.startPlace == nil && ride.hasRoute {
-            var copy = ride
-            copy.startPlace = await Self.place(for: ride.points.first(where: \.hasLocation))
-            copy.endPlace = await Self.place(for: ride.points.last(where: \.hasLocation))
-            guard copy.startPlace != nil else { continue }
-            save(copy)
+            guard let start = await Self.place(for: ride.points.first(where: \.hasLocation)) else { continue }
+            let end = await Self.place(for: ride.points.last(where: \.hasLocation))
+            update(ride.id) {
+                $0.startPlace = start
+                $0.endPlace = end
+            }
         }
     }
 
@@ -50,16 +50,28 @@ final class RideStore {
 
     func reload() {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        rides = files.compactMap { try? JSONDecoder().decode(Ride.self, from: Data(contentsOf: $0)) }
+        rides = files.compactMap(Self.read).map { $0.cleanedRoute() }
             .sorted { $0.startedAt > $1.startedAt }
     }
 
+    /// Saves a ride as recorded.
     func save(_ ride: Ride) {
         guard let data = try? JSONEncoder().encode(ride) else { return }
         try? data.write(to: file(for: ride.id), options: .atomic)
         rides.removeAll { $0.id == ride.id }
-        rides.insert(ride, at: 0)
+        rides.append(ride.cleanedRoute())
         rides.sort { $0.startedAt > $1.startedAt }
+    }
+
+    /// Edits the saved raw ride, not the cleaned copy in `rides`.
+    private func update(_ id: UUID, _ change: (inout Ride) -> Void) {
+        guard var ride = Self.read(file(for: id)) else { return }
+        change(&ride)
+        save(ride)
+    }
+
+    private static func read(_ url: URL) -> Ride? {
+        try? JSONDecoder().decode(Ride.self, from: Data(contentsOf: url))
     }
 
     func delete(_ ride: Ride) {
@@ -103,7 +115,7 @@ final class RideRecorder: NSObject {
         manager.delegate = self
         manager.activityType = .otherNavigation
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 2
+        manager.distanceFilter = kCLDistanceFilterNone
     }
 
     var isRecording: Bool { current != nil }
@@ -128,15 +140,17 @@ final class RideRecorder: NSObject {
         guard now.timeIntervalSince(lastSample) >= 0.9 else { return }
         lastSample = now
         let speed = t.speedKPH ?? 0
-        if speed >= 2 { lastMoving = now }
-        if speed < 2 { holdUntilStopped = false }
+        if speed >= Ride.movingKPH { lastMoving = now } else { holdUntilStopped = false }
 
         if current == nil {
             guard speed >= 3, !holdUntilStopped else { return }
             start(board: board, telemetry: t, now: now)
         }
         guard var ride = current else { return }
-        let location = lastLocation.flatMap { now.timeIntervalSince($0.timestamp) < 5 ? $0 : nil }
+        // Each fix is used once: indoors no new fixes arrive, and repeating
+        // the last one pins the route to a doorway.
+        let location = lastLocation.flatMap { now.timeIntervalSince($0.timestamp) < 3 ? $0 : nil }
+        lastLocation = nil
         ride.points.append(RidePoint(time: now,
                                      latitude: location?.coordinate.latitude,
                                      longitude: location?.coordinate.longitude,
@@ -171,15 +185,16 @@ final class RideRecorder: NSObject {
         guard var ride = current else { return }
         current = nil
         // Drop the idle tail after the last movement.
-        if let lastMove = ride.points.lastIndex(where: { $0.speedKPH >= 2 }) {
+        if let lastMove = ride.points.lastIndex(where: { $0.speedKPH >= Ride.movingKPH }) {
             ride.points = Array(ride.points.prefix(through: min(lastMove + 1, ride.points.count - 1)))
         }
-        guard ride.isWorthSaving else {
+        let cleaned = ride.cleanedRoute()
+        guard cleaned.isWorthSaving else {
             log("ride too short, not saved")
             return
         }
         store.save(ride)
-        log(String(format: "ride saved: %.2f km", ride.distanceKm))
+        log(String(format: "ride saved: %.2f km", cleaned.distanceKm))
         Task { await store.nameUnnamedRides() }
     }
 
@@ -231,7 +246,9 @@ final class RideRecorder: NSObject {
 
 extension RideRecorder: @preconcurrency CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let latest = locations.last, latest.horizontalAccuracy >= 0, latest.horizontalAccuracy < 50 else { return }
+        // Indoors and just after stepping outside, fixes come back with poor
+        // accuracy; only trust ones within 20 m.
+        guard let latest = locations.last, latest.horizontalAccuracy >= 0, latest.horizontalAccuracy <= 20 else { return }
         lastLocation = latest
     }
 
