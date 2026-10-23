@@ -213,6 +213,11 @@ struct BoardView: View {
                             .foregroundStyle(.tint)
                     }
                     Spacer()
+                    if let rides = connection.insights?.usualRidesLeft(rangeKm: km), rides > 0 {
+                        Text(rides == 1 ? "1 usual ride" : "\(rides) usual rides")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }

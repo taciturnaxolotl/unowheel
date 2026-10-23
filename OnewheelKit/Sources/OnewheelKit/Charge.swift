@@ -10,24 +10,34 @@ import Foundation
 /// So "100%" arrives at the start of the taper. The estimate stops at the
 /// jump, which is also when the board passes 90%: past that point the cells
 /// gain little for a lot of waiting.
-public struct ChargeSession: Equatable, Sendable {
-    public struct Sample: Equatable, Sendable, Identifiable {
+public struct ChargeSession: Codable, Equatable, Sendable, Identifiable {
+    public struct Sample: Codable, Equatable, Sendable, Identifiable {
         public let date: Date
         public let percent: Int
         public let watts: Double?
+        public var volts: Double?
+        public var batteryTempC: Int?
         public var id: Date { date }
     }
 
     public private(set) var samples: [Sample] = []
+    public let id: UUID
     public let startedAt: Date
+    public let board: String?
+    /// How long a percent took on this board's past charges, used until
+    /// this session has measured its own rate.
+    public let typicalSecondsPerPercent: Double?
 
     /// Percent change needed before the measured rate replaces the power guess.
     static let minimumMeasuredPoints = 3
     /// Where the board stops counting up and jumps to 100%.
     static let jumpPercent = 88
 
-    public init(startedAt: Date = .now) {
+    public init(id: UUID = UUID(), startedAt: Date = .now, board: String? = nil, typicalSecondsPerPercent: Double? = nil) {
+        self.id = id
         self.startedAt = startedAt
+        self.board = board
+        self.typicalSecondsPerPercent = typicalSecondsPerPercent
     }
 
     public var startPercent: Int? { samples.first?.percent }
@@ -35,9 +45,10 @@ public struct ChargeSession: Equatable, Sendable {
 
     /// Records a reading, keeping at most one sample every 30 seconds unless
     /// the percentage changed.
-    public mutating func record(percent: Int, watts: Double?, at date: Date = .now) {
+    public mutating func record(percent: Int, watts: Double?, volts: Double? = nil, batteryTempC: Int? = nil,
+                                at date: Date = .now) {
         if let last = samples.last, last.percent == percent, date.timeIntervalSince(last.date) < 30 { return }
-        samples.append(Sample(date: date, percent: percent, watts: watts))
+        samples.append(Sample(date: date, percent: percent, watts: watts, volts: volts, batteryTempC: batteryTempC))
     }
 
     /// Samples where the percentage changed. Measuring between these avoids
@@ -53,6 +64,20 @@ public struct ChargeSession: Equatable, Sendable {
         guard points >= Self.minimumMeasuredPoints else { return nil }
         let span = last.date.timeIntervalSince(first.date)
         return span > 0 ? span / Double(points) : nil
+    }
+
+    /// Charger energy per percent, between the first and last steps below
+    /// the jump.
+    var measuredWattHoursPerPercent: Double? {
+        let steps = steps.filter { $0.percent < Self.jumpPercent }
+        guard let first = steps.first, let last = steps.last,
+              last.percent - first.percent >= Self.minimumMeasuredPoints else { return nil }
+        let span = samples.filter { $0.date >= first.date && $0.date <= last.date }
+        let wh = zip(span, span.dropFirst()).reduce(0.0) { total, pair in
+            guard let watts = pair.0.watts else { return total }
+            return total + watts * pair.1.date.timeIntervalSince(pair.0.date) / 3600
+        }
+        return wh > 0 ? wh / Double(last.percent - first.percent) : nil
     }
 
     public var isMeasured: Bool { measuredSecondsPerPercent != nil }
@@ -74,7 +99,7 @@ public struct ChargeSession: Equatable, Sendable {
     public func secondsToFull(packWattHours: Double) -> TimeInterval? {
         guard let percent = latestPercent, percent < Self.jumpPercent else { return nil }
         let perPercent: Double
-        if let measured = measuredSecondsPerPercent {
+        if let measured = measuredSecondsPerPercent ?? typicalSecondsPerPercent {
             perPercent = measured
         } else if let watts = samples.last?.watts ?? averageWatts, watts > 20 {
             perPercent = packWattHours / 100 / watts * 3600

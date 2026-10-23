@@ -8,7 +8,10 @@ import OnewheelKit
 @MainActor
 @Observable
 final class RideStore {
-    private(set) var rides: [Ride] = []
+    private(set) var rides: [Ride] = [] {
+        didSet { insights = Dictionary(grouping: rides) { $0.board.lowercased() }.mapValues(RideInsights.init) }
+    }
+    private var insights: [String: RideInsights] = [:]
 
     private let folder: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -19,7 +22,11 @@ final class RideStore {
 
     init() {
         reload()
-        Task { await nameUnnamedRides() }
+        Task { await annotate() }
+    }
+
+    func insights(for board: String?) -> RideInsights? {
+        board.flatMap { insights[$0.lowercased()] }
     }
 
     func rename(_ ride: Ride, to title: String) {
@@ -27,15 +34,22 @@ final class RideStore {
         update(ride.id) { $0.customTitle = trimmed.isEmpty ? nil : trimmed }
     }
 
-    /// Looks up where rides started and ended, for their titles. Apple
-    /// rate-limits geocoding, so this goes one ride at a time.
-    func nameUnnamedRides() async {
-        for ride in rides where ride.startPlace == nil && ride.hasRoute {
-            guard let start = await Self.place(for: ride.points.first(where: \.hasLocation)) else { continue }
-            let end = await Self.place(for: ride.points.last(where: \.hasLocation))
-            update(ride.id) {
-                $0.startPlace = start
-                $0.endPlace = end
+    /// Looks up where rides started and ended, for their titles, and the
+    /// weather they started in. Apple rate-limits geocoding, so this goes
+    /// one ride at a time.
+    func annotate() async {
+        for ride in rides where ride.hasRoute {
+            let first = ride.points.first(where: \.hasLocation)
+            if ride.startPlace == nil, let start = await Self.place(for: first) {
+                let end = await Self.place(for: ride.points.last(where: \.hasLocation))
+                update(ride.id) {
+                    $0.startPlace = start
+                    $0.endPlace = end
+                }
+            }
+            if ride.weather == nil, let coordinate = first?.coordinate,
+               let weather = await WeatherLookup.weather(at: coordinate, on: ride.startedAt) {
+                update(ride.id) { $0.weather = weather }
             }
         }
     }
@@ -129,8 +143,9 @@ final class RideRecorder: NSObject {
         }
     }
 
-    /// Call once a second with the latest board state.
-    func update(board: String?, telemetry t: Telemetry, live: Bool, now: Date = .now) {
+    /// Call once a second with the latest board state. `volts` is the pack
+    /// voltage, worked out when the board doesn't report it.
+    func update(board: String?, telemetry t: Telemetry, volts: Double?, live: Bool, now: Date = .now) {
         guard live, let board, !t.isCharging else {
             if current != nil { finish() }
             return
@@ -157,10 +172,13 @@ final class RideRecorder: NSObject {
                                      altitude: location?.altitude,
                                      speedKPH: speed,
                                      batteryPercent: t.batteryPercent,
-                                     watts: t.usesModernTelemetry ? t.powerWatts
-                                         : t.currentAmps.flatMap { amps in t.batteryVoltage.map { amps * $0 } },
+                                     watts: t.motorWatts,
                                      motorTempC: t.motorTemperatureC,
-                                     controllerTempC: t.controllerTemperatureC))
+                                     controllerTempC: t.controllerTemperatureC,
+                                     batteryTempC: t.batteryTemperatureC,
+                                     volts: volts))
+        // The trip counter can arrive a moment after the ride starts.
+        if tripStart == nil { tripStart = t.tripRevolutions }
         if let start = tripStart, let trip = t.tripRevolutions, trip >= start {
             ride.odometerKm = Double(trip - start) * t.model.wheelCircumferenceMM / 1_000_000
         }
@@ -195,7 +213,7 @@ final class RideRecorder: NSObject {
         }
         store.save(ride)
         log(String(format: "ride saved: %.2f km", cleaned.distanceKm))
-        Task { await store.nameUnnamedRides() }
+        Task { await store.annotate() }
     }
 
     private func start(board: String, telemetry t: Telemetry, now: Date) {

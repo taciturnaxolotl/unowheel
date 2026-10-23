@@ -71,7 +71,8 @@ final class BoardConnection: NSObject {
     private(set) var log: [String] = []
     private(set) var range = RangeEstimator()
     private(set) var unlockedAt: Date?
-    private(set) var chargeSession: ChargeSession?
+    let charges = ChargeRecorder()
+    var chargeSession: ChargeSession? { charges.current }
     private(set) var voltage = PackVoltageEstimator()
 
     /// Reported pack voltage, or worked out from power and charge counters
@@ -79,7 +80,9 @@ final class BoardConnection: NSObject {
     var packVolts: Double? { telemetry.batteryVoltage ?? voltage.volts }
     var isToppingOff: Bool { ChargeSession.isToppingOff(percent: telemetry.batteryPercent, watts: telemetry.chargingWatts) }
 
-    var rangeKm: Double? { range.rangeKm(for: shown) }
+    var insights: RideInsights? { rides.insights(for: boardName) }
+    var rangeKm: Double? { range.rangeKm(for: shown, predicted: insights?.predictedWhPerKm(now: shown)) }
+    var isRangeLearned: Bool { range.isLearned || insights?.efficiency != nil }
 
     /// Stats saved from the last time this board was connected.
     private(set) var cached: Telemetry?
@@ -164,16 +167,11 @@ final class BoardConnection: NSObject {
         let now = Date.now
         let elapsed = now.timeIntervalSince(lastTick)
         lastTick = now
-        recorder.update(board: boardName, telemetry: telemetry, live: isLive, now: now)
+        recorder.update(board: boardName, telemetry: telemetry, volts: packVolts, live: isLive, now: now)
         if isRecording != recorder.isRecording { isRecording = recorder.isRecording }
         guard isConnected else { return }
         if phase == .unlocked { voltage.record(telemetry, at: now) }
-        if phase == .unlocked, telemetry.isCharging, let percent = telemetry.batteryPercent {
-            if chargeSession == nil { chargeSession = ChargeSession() }
-            chargeSession?.record(percent: percent, watts: telemetry.chargingWatts)
-        } else if !telemetry.isCharging {
-            chargeSession = nil
-        }
+        charges.update(board: boardName, telemetry: telemetry, volts: packVolts, live: phase == .unlocked)
         if phase == .unlocked, !telemetry.isCharging {
             range.record(telemetry, seconds: elapsed)
             if now.timeIntervalSince(lastRangeSave) > 30 { saveRange() }
@@ -184,7 +182,7 @@ final class BoardConnection: NSObject {
 
     private func syncMirror() {
         mirror.sync(name: displayName, telemetry: telemetry, unlocked: phase == .unlocked,
-                    rangeKm: rangeKm, rangeLearned: range.isLearned, startedAt: unlockedAt,
+                    rangeKm: rangeKm, rangeLearned: isRangeLearned, startedAt: unlockedAt,
                     charge: chargeSession, ride: recorder.current)
     }
 
@@ -303,7 +301,7 @@ final class BoardConnection: NSObject {
             for i in 0...30 {
                 session.record(percent: 22 + Int(Double(i) * 0.8), watts: 170, at: .now.addingTimeInterval(Double(i - 30) * 30))
             }
-            chargeSession = session
+            charges.current = session
         }
         if CommandLine.arguments.contains("-rides"), rides.rides.isEmpty {
             // A loop around a park, faster on the straights.
@@ -431,7 +429,7 @@ final class BoardConnection: NSObject {
         characteristics = [:]
         assembler.reset()
         unlockedAt = nil
-        chargeSession = nil
+        charges.current = nil
         voltage = PackVoltageEstimator()
         loadRange(for: name)
         loadCache(for: name)
@@ -895,7 +893,7 @@ extension BoardConnection: @preconcurrency CBPeripheralDelegate {
             telemetry.apply(characteristic, data: data)
             // Board notifications keep arriving with the phone locked, unlike
             // timers, so they drive ride sampling too.
-            recorder.update(board: boardName, telemetry: telemetry, live: true)
+            recorder.update(board: boardName, telemetry: telemetry, volts: packVolts, live: true)
         }
     }
 

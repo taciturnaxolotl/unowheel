@@ -260,13 +260,22 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(abs(ride.gpsKm - 1.112) < 0.01)
         #expect(ride.duration == 10)
         #expect(ride.movingTime == 10)
-        #expect(ride.isWorthSaving)
     }
 
     @Test func prefersOdometer() {
         var ride = Ride(board: "ow1", points: [point(0, lat: 40, speed: 10), point(60, lat: 40.01, speed: 10)])
         ride.odometerKm = 0.9
         #expect(ride.distanceKm == 0.9)
+    }
+
+    @Test func fallsBackToWheelSpeedNotGPS() {
+        // GPS wanders 1.1 km; the wheel says 36 km/h for 10 s, which is 100 m.
+        let ride = Ride(board: "ow1", points: (0...10).map { point(Double($0), lat: 40 + Double($0) * 0.001, speed: 36) })
+        #expect(abs(ride.distanceKm - 0.1) < 0.001)
+        let still = Ride(board: "ow1", points: (0...10).map { point(Double($0), lat: 40 + Double($0) * 0.001, speed: 0) })
+        #expect(still.distanceKm == still.gpsKm)
+        let worthIt = Ride(board: "ow1", points: (0...30).map { point(Double($0), lat: 40, speed: 20) })
+        #expect(worthIt.isWorthSaving)
     }
 
     @Test func batteryAndTop() {
@@ -467,5 +476,66 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         let url = URL(fileURLWithPath: NSHomeDirectory()).appending(path: "Downloads/onewheel.pklg")
         guard let data = try? Data(contentsOf: url) else { return }
         #expect(PacketLoggerCapture.findings(in: data).responses == [hydrusResponse])
+    }
+}
+
+@Suite struct InsightTests {
+    /// A steady ride whose pack rate is `rate` Wh/km.
+    func ride(start: Double = 0, km: Double = 2, kph: Double, rate: Double, tempC: Int? = nil) -> Ride {
+        let seconds = Int(km / kph * 3600)
+        return Ride(board: "ow1", points: (0...seconds).map {
+            RidePoint(time: Date(timeIntervalSince1970: start + Double($0)), speedKPH: kph, watts: rate * kph, motorTempC: tempC)
+        })
+    }
+
+    @Test func fitsSpeedAndCold() throws {
+        // 4 Wh/km base, +0.3 per km/h, +0.2 per degree under 20 C.
+        let truth = { (kph: Double, temp: Int) in 4 + 0.3 * kph + 0.2 * max(0, 20 - Double(temp)) }
+        let rides = [(8.0, 25), (12, 25), (18, 25), (10, 10), (15, 5), (20, 15), (9, 0)]
+            .map { ride(kph: $0.0, rate: truth($0.0, $0.1), tempC: $0.1) }
+        let model = try #require(EfficiencyModel(rides: rides))
+        #expect(abs(model.perKPH - 0.3) < 0.03)
+        #expect(abs(model.perDegreeCold - 0.2) < 0.03)
+        #expect(abs(model.whPerKm(speedKPH: 14, temperatureC: 8) - truth(14, 8)) < 0.3)
+    }
+
+    @Test func needsEnoughRidesAndToleratesNoTemperatureSpread() throws {
+        let warm = (0..<5).map { ride(kph: 8 + Double($0) * 2, rate: 4 + 0.3 * (8 + Double($0) * 2), tempC: 22) }
+        #expect(EfficiencyModel(rides: warm) == nil)
+        let model = try #require(EfficiencyModel(rides: warm + [ride(kph: 11, rate: 7.3, tempC: 22)]))
+        #expect(model.perDegreeCold == 0)
+        #expect(abs(model.perKPH - 0.3) < 0.05)
+    }
+
+    @Test func usualRides() throws {
+        let rides = [1.0, 2.0, 3.0, 0.1].map { ride(km: $0, kph: 12, rate: 8) }
+        let insights = RideInsights(rides: rides)
+        #expect(abs(try #require(insights.usualKm) - 2) < 0.001)
+        #expect(abs(try #require(insights.usualKPH) - 12) < 0.1)
+        #expect(insights.usualRidesLeft(rangeKm: 9) == 4)
+        #expect(insights.predictedWhPerKm(now: Telemetry()) == nil)
+    }
+
+    @Test func learnsChargeRateAndEnergy() throws {
+        let start = Date(timeIntervalSince1970: 0)
+        var past = ChargeSession(startedAt: start)
+        for pct in 40...60 { past.record(percent: pct, watts: 180, at: start.addingTimeInterval(Double(pct - 40) * 30)) }
+        let history = ChargeHistory(sessions: [past])
+        #expect(history.secondsPerPercent == 30)
+        #expect(abs(try #require(history.wattHoursPerPercent) - 1.5) < 0.01)
+
+        var now = ChargeSession(startedAt: start, typicalSecondsPerPercent: history.secondsPerPercent)
+        now.record(percent: 70, watts: 180, at: start)
+        #expect(abs(try #require(now.secondsToFull(packWattHours: 139)) - 18 * 30) < 0.01)
+    }
+
+    @Test func oldFilesStillDecode() throws {
+        let json = #"{"id":"9321B72C-5765-4FF9-8A35-DB3499845787","board":"onewheel","points":[{"time":0,"speedKPH":5}]}"#
+        let ride = try JSONDecoder().decode(Ride.self, from: Data(json.utf8))
+        #expect(ride.weather == nil)
+        #expect(ride.points[0].volts == nil)
+        var session = ChargeSession(board: "ow1")
+        session.record(percent: 50, watts: 170, volts: 58.1, batteryTempC: 18)
+        #expect(try JSONDecoder().decode(ChargeSession.self, from: JSONEncoder().encode(session)) == session)
     }
 }

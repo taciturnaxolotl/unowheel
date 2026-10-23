@@ -13,10 +13,13 @@ public struct RidePoint: Codable, Equatable, Sendable {
     public var watts: Double?
     public var motorTempC: Int?
     public var controllerTempC: Int?
+    public var batteryTempC: Int?
+    /// Pack voltage; it sags under load, more so in the cold and as cells age.
+    public var volts: Double?
 
     public init(time: Date, latitude: Double? = nil, longitude: Double? = nil, altitude: Double? = nil,
                 speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
-                motorTempC: Int? = nil, controllerTempC: Int? = nil) {
+                motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
@@ -26,6 +29,8 @@ public struct RidePoint: Codable, Equatable, Sendable {
         self.watts = watts
         self.motorTempC = motorTempC
         self.controllerTempC = controllerTempC
+        self.batteryTempC = batteryTempC
+        self.volts = volts
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
@@ -50,6 +55,8 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var endPlace: String?
     /// Your own name for the ride, if you've given it one.
     public var customTitle: String?
+    /// Weather where and when the ride started, looked up after the ride.
+    public var weather: Weather?
 
     public init(id: UUID = UUID(), board: String, points: [RidePoint] = [], odometerKm: Double? = nil) {
         self.id = id
@@ -79,7 +86,18 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    public var distanceKm: Double { odometerKm ?? gpsKm }
+    /// Distance from wheel speed over time. Matches the odometer within a
+    /// couple of percent, where GPS can be far off near buildings.
+    public var wheelKm: Double {
+        zip(points, points.dropFirst()).reduce(0) { total, pair in
+            let gap = pair.1.time.timeIntervalSince(pair.0.time)
+            return gap < 10 ? total + pair.0.speedKPH * gap / 3600 : total
+        }
+    }
+
+    /// The odometer when it was read, then wheel speed. GPS only for rides
+    /// with no speed at all.
+    public var distanceKm: Double { odometerKm ?? (wheelKm > 0 ? wheelKm : gpsKm) }
 
     public var averageMovingKPH: Double {
         movingTime > 0 ? distanceKm / (movingTime / 3600) : 0
@@ -107,6 +125,22 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var whPerKm: Double? {
         guard hasPower, distanceKm > 0.1 else { return nil }
         return max(energyWh - regenWh, 0) / distanceKm
+    }
+
+    /// Wh per km the pack actually gave up, crediting regen the way the
+    /// range estimate does.
+    public var packWhPerKm: Double? {
+        guard hasPower, distanceKm > 0.1 else { return nil }
+        return max(energyWh - regenWh * RangeEstimator.regenCredit, 0) / distanceKm
+    }
+
+    /// The temperature the board started in: the pack's own reading, then
+    /// the motor's (it matches the air once the board has sat a while),
+    /// then the weather.
+    public var startTemperatureC: Double? {
+        points.lazy.compactMap(\.batteryTempC).first.map(Double.init)
+            ?? points.lazy.compactMap(\.motorTempC).first.map(Double.init)
+            ?? weather?.temperatureC
     }
 
     /// Metres climbed, ignoring GPS altitude wobble under 2 m.

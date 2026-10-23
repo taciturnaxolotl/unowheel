@@ -195,6 +195,9 @@ struct RideDetailView: View {
                     RideStat(title: "Peak power", value: String(format: "%.0f W", peak))
                 }
             }
+            if let weather = ride.weather {
+                RideStat(title: "Weather", value: formatWeather(weather, metric: useMetric))
+            }
             if let gain = ride.elevationGainM {
                 RideStat(title: "Climbed", value: useMetric ? String(format: "%.0f m", gain) : String(format: "%.0f ft", gain * 3.28084))
             }
@@ -206,7 +209,7 @@ struct RideDetailView: View {
 }
 
 enum RideChartKind: String, CaseIterable, Identifiable {
-    case speed = "Speed", power = "Power", battery = "Battery", elevation = "Height", temperature = "Heat"
+    case speed = "Speed", power = "Power", battery = "Battery", temperature = "Heat"
     var id: String { rawValue }
 }
 
@@ -222,7 +225,6 @@ private struct RideCharts: View {
             case .speed: true
             case .power: ride.hasPower
             case .battery: ride.points.contains { $0.batteryPercent != nil }
-            case .elevation: ride.elevationGainM != nil
             case .temperature: ride.maxMotorTempC != nil
             }
         }
@@ -258,9 +260,6 @@ private struct RideCharts: View {
             .chartXAxis { timeAxis }
         case .battery:
             line(points.compactMap { p in p.batteryPercent.map { (p.time, Double($0)) } }, color: .green, unit: "%")
-        case .elevation:
-            let factor = useMetric ? 1 : 3.28084
-            line(points.compactMap { p in p.altitude.map { (p.time, $0 * factor) } }, color: .blue, unit: useMetric ? "m" : "ft")
         case .temperature:
             let convert: (Int) -> Double = { useMetric ? Double($0) : Double($0) * 9 / 5 + 32 }
             Chart {
@@ -453,6 +452,12 @@ func formatDistance(_ km: Double, metric: Bool) -> String {
 
 func formatSpeed(_ kph: Double, metric: Bool) -> String {
     String(format: "%.0f %@", metric ? kph : kph * 0.621371, metric ? "km/h" : "mph")
+}
+
+func formatWeather(_ weather: Weather, metric: Bool) -> String {
+    let temperature = metric ? String(format: "%.0f°C", weather.temperatureC) : String(format: "%.0f°F", weather.temperatureC * 9 / 5 + 32)
+    let wind = metric ? String(format: "%.0f km/h", weather.windKPH) : String(format: "%.0f mph", weather.windKPH * 0.621371)
+    return weather.precipitationMM > 0.1 ? "\(temperature), wet" : "\(temperature), wind \(wind)"
 }
 
 func formatDuration(_ seconds: TimeInterval) -> String {

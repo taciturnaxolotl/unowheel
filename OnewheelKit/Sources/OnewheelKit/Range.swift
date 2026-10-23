@@ -46,16 +46,18 @@ public struct RangeEstimator: Codable, Equatable, Sendable {
     /// Distance needed before learned efficiency replaces the rated guess.
     public static let minimumKm = 0.5
     static let minimumSpeedKPH = 2.0
+    /// Share of regen the pack really gets back.
+    public static let regenCredit = 0.25
 
     public init() {}
 
     /// Feeds one telemetry sample covering `seconds` of riding.
     public mutating func record(_ t: Telemetry, seconds: TimeInterval) {
         guard seconds > 0, seconds < 10, let speed = t.speedKPH, speed >= Self.minimumSpeedKPH,
-              let watts = Self.watts(t) else { return }
+              let watts = t.motorWatts else { return }
         let hours = seconds / 3600
         rideKm += speed * hours
-        rideWh += (watts < 0 ? watts * 0.25 : watts) * hours
+        rideWh += (watts < 0 ? watts * Self.regenCredit : watts) * hours
         if rideKm >= 0.1 { fold() }
     }
 
@@ -72,20 +74,26 @@ public struct RangeEstimator: Codable, Equatable, Sendable {
         rideKm = 0
     }
 
-    public func rangeKm(for t: Telemetry) -> Double? {
+    /// `predicted` is a rate for the conditions right now, from your ride
+    /// history; without it the running average is used.
+    public func rangeKm(for t: Telemetry, predicted: Double? = nil) -> Double? {
         guard let percent = t.batteryPercent, percent > 0 else { return nil }
         let model = t.model
         let rated = model.ratedRangeKm * Double(percent) / 100
-        guard let whPerKm, whPerKm > 0, learnedKm >= Self.minimumKm else { return rated }
+        guard let rate = predicted ?? (isLearned ? whPerKm : nil), rate > 0 else { return rated }
         let remainingWh = model.packWattHours * Double(percent) / 100
-        return min(remainingWh / whPerKm, model.ratedRangeKm * 1.25)
+        return min(remainingWh / rate, model.ratedRangeKm * 1.25)
     }
 
     public var isLearned: Bool { (whPerKm ?? 0) > 0 && learnedKm >= Self.minimumKm }
+}
 
-    static func watts(_ t: Telemetry) -> Double? {
-        if t.usesModernTelemetry { return t.powerWatts }
-        guard let amps = t.currentAmps, let volts = t.batteryVoltage else { return nil }
+extension Telemetry {
+    /// Motor power from `304` on newer firmware, or current times voltage
+    /// on older boards.
+    public var motorWatts: Double? {
+        if usesModernTelemetry { return powerWatts }
+        guard let amps = currentAmps, let volts = batteryVoltage else { return nil }
         return amps * volts
     }
 }

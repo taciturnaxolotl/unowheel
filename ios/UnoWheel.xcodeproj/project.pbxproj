@@ -12,12 +12,14 @@
 		4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */; };
 		4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */; };
 		5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */; };
+		5CE9C08648DE24811E07D573 /* ChargeRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F2379A461866784708DD42 /* ChargeRecorder.swift */; };
 		5E9B6EEC55B6E7C7735BFAC8 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C9A433C252BB5503D037ED /* BatteryWidget.swift */; };
 		6025C73120A6FEF4F83685A6 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
 		6A85E92DDC8E265C6B3F408B /* LightsIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF5DA7D8A532510766EE31E /* LightsIntent.swift */; };
 		6DA052936291834EFF123F23 /* UnoWheelWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7B35FBEB8E33EE81FF8DD05F /* OnewheelKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF99CDA47937E74370783800 /* OnewheelKit */; };
 		8CBAE7CC81CB7602F2844780 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */; };
+		95C5609AF2BEF8D6879FB5C5 /* WeatherLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622187ECD39D6A4774F85DFC /* WeatherLookup.swift */; };
 		95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FAB40A1A7E79280B636C47 /* BoardView.swift */; };
 		9F1D975C104D557EE8FD77D0 /* RideLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */; };
 		ABBA1D2E6D2338A90F278298 /* UnlockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */; };
@@ -67,10 +69,12 @@
 		3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = UnoWheelWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D1A24D60E710982DA6A0D80 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
 		3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockStore.swift; sourceTree = "<group>"; };
+		42F2379A461866784708DD42 /* ChargeRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeRecorder.swift; sourceTree = "<group>"; };
 		44C36F41820D5863016AC6E8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5932ED0A9794DC4CFEE7E7BD /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
 		5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMirror.swift; sourceTree = "<group>"; };
 		61504825A1F3396112873106 /* UnoWheel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = UnoWheel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		622187ECD39D6A4774F85DFC /* WeatherLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherLookup.swift; sourceTree = "<group>"; };
 		97828C944F6A976A2DF82772 /* UnoWheelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelApp.swift; sourceTree = "<group>"; };
 		A1C9A433C252BB5503D037ED /* BatteryWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
 		A4B104B5E09107FDD9FA58D5 /* RidesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesView.swift; sourceTree = "<group>"; };
@@ -123,6 +127,7 @@
 				44C36F41820D5863016AC6E8 /* Assets.xcassets */,
 				EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */,
 				09FAB40A1A7E79280B636C47 /* BoardView.swift */,
+				42F2379A461866784708DD42 /* ChargeRecorder.swift */,
 				075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */,
 				26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */,
 				5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */,
@@ -133,6 +138,7 @@
 				F3D6FFB153009A78C10A5037 /* UnlockView.swift */,
 				97828C944F6A976A2DF82772 /* UnoWheelApp.swift */,
 				0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */,
+				622187ECD39D6A4774F85DFC /* WeatherLookup.swift */,
 			);
 			path = UnoWheel;
 			sourceTree = "<group>";
@@ -272,6 +278,7 @@
 			files = (
 				D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */,
 				95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */,
+				5CE9C08648DE24811E07D573 /* ChargeRecorder.swift in Sources */,
 				4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */,
 				4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */,
 				D6FDBA1B7CFD90CD63788064 /* LightsIntent.swift in Sources */,
@@ -284,6 +291,7 @@
 				1DBF9680D7DB454EBDB042E1 /* UnlockView.swift in Sources */,
 				F7E371F4E82070BCAB0AE6EC /* UnoWheelApp.swift in Sources */,
 				E27A174A241ACCB0E3E14100 /* Waiters.swift in Sources */,
+				95C5609AF2BEF8D6879FB5C5 /* WeatherLookup.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
