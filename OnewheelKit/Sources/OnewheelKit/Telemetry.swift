@@ -142,7 +142,10 @@ public struct Telemetry: Equatable, Sendable, Codable {
         }
     }
 
-    private var ampHourScale: Double { model == .v1 ? 0.00009 : 0.00018 }
+    /// Amp-hours per unit on the `313` and `314` counters.
+    public var ampHoursPerUnit: Double { model == .v1 ? 0.00009 : 0.00018 }
+
+    private var ampHourScale: Double { ampHoursPerUnit }
 
     private func angle(_ raw: UInt16) -> Double { 0.1 * (1800 - Double(raw)) }
 }

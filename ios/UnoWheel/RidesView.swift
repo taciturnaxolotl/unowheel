@@ -195,6 +195,9 @@ struct RideDetailView: View {
                     RideStat(title: "Peak power", value: String(format: "%.0f W", peak))
                 }
             }
+            if let pitch = ride.peakPitch, pitch > 3 {
+                RideStat(title: "Peak nose up", value: String(format: "%.0f°", pitch))
+            }
             if let weather = ride.weather {
                 RideStat(title: "Weather", value: formatWeather(weather, metric: useMetric))
             }
@@ -209,7 +212,7 @@ struct RideDetailView: View {
 }
 
 enum RideChartKind: String, CaseIterable, Identifiable {
-    case speed = "Speed", power = "Power", battery = "Battery", temperature = "Heat"
+    case speed = "Speed", power = "Power", battery = "Battery", temperature = "Heat", pitch = "Nose"
     var id: String { rawValue }
 }
 
@@ -226,6 +229,7 @@ private struct RideCharts: View {
             case .power: ride.hasPower
             case .battery: ride.points.contains { $0.batteryPercent != nil }
             case .temperature: ride.maxMotorTempC != nil
+            case .pitch: ride.peakPitch != nil
             }
         }
     }
@@ -260,6 +264,8 @@ private struct RideCharts: View {
             .chartXAxis { timeAxis }
         case .battery:
             line(points.compactMap { p in p.batteryPercent.map { (p.time, Double($0)) } }, color: .green, unit: "%")
+        case .pitch:
+            line(points.compactMap { p in p.pitch.map { (p.time, $0) } }, color: .purple, unit: "°")
         case .temperature:
             let convert: (Int) -> Double = { useMetric ? Double($0) : Double($0) * 9 / 5 + 32 }
             Chart {

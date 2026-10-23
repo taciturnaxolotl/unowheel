@@ -116,6 +116,10 @@ final class RideRecorder: NSObject {
     private let altimeter = CMAltimeter()
     /// Latest barometric height since the ride began, in metres.
     private var climb: Double?
+    /// Board counters at the last sample, for amp-hours since the ride began.
+    private var lastCounters: (used: Int, regen: Int)?
+    private var usedAh = 0.0
+    private var regenAh = 0.0
     private var lastSample = Date.distantPast
     /// After you end a ride by hand, wait for the board to stop before
     /// starting another, so it doesn't restart mid-roll.
@@ -183,7 +187,11 @@ final class RideRecorder: NSObject {
                                      volts: volts,
                                      climbM: climb,
                                      rideMode: t.rideMode,
-                                     status: t.statusError))
+                                     status: t.statusError,
+                                     pitch: t.pitch,
+                                     usedAh: usedAh,
+                                     regenAh: regenAh))
+        countAmpHours(t)
         // The trip counter can arrive a moment after the ride starts.
         if tripStart == nil { tripStart = t.tripRevolutions }
         if let start = tripStart, let trip = t.tripRevolutions, trip >= start {
@@ -223,8 +231,23 @@ final class RideRecorder: NSObject {
         Task { await store.annotate() }
     }
 
+    /// Adds up the board's own charge counters, which move in 0.18 mAh steps.
+    private func countAmpHours(_ t: Telemetry) {
+        guard let used = t.tripAmpHoursRaw, let regen = t.tripRegenAmpHoursRaw else { return }
+        defer { lastCounters = (used, regen) }
+        guard let last = lastCounters else { return }
+        // A 16-bit counter wrapped, or the board restarted it.
+        guard used >= last.used, regen >= last.regen else { return }
+        let scale = t.ampHoursPerUnit
+        usedAh += Double(used - last.used) * scale
+        regenAh += Double(regen - last.regen) * scale
+    }
+
     private func start(board: String, telemetry t: Telemetry, now: Date) {
         current = Ride(board: board)
+        lastCounters = nil
+        usedAh = 0
+        regenAh = 0
         tripStart = t.tripRevolutions
         lastMoving = now
         log("ride started")

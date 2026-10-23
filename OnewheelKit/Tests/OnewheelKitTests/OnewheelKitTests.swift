@@ -363,8 +363,26 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(abs(ride.regenWh - 50) < 0.2)
         #expect(abs((ride.whPerKm ?? 0) - 15) < 0.1)
         #expect(ride.peakWatts == 200)
+        // A lone spike from mismatched samples is smoothed away.
+        let spiky = Ride(board: "ow1", points: [100, 120, 900, 140, 130].enumerated().map {
+            RidePoint(time: Date(timeIntervalSince1970: Double($0.offset)), speedKPH: 10, watts: Double($0.element))
+        })
+        #expect(abs((spiky.peakWatts ?? 0) - (900 + 140 + 130) / 3) < 0.01)
         #expect(abs((ride.elevationGainM ?? 0) - 10) < 2)
         #expect(ride.maxMotorTempC == 39)
+    }
+
+    @Test func countedVoltsFromAmpHours() throws {
+        // 60 V pack at 300 W for 60 s: 5 Wh and 5/60 Ah.
+        let points = (0...60).map { i in
+            RidePoint(time: Date(timeIntervalSince1970: Double(i)), speedKPH: 20, watts: 300,
+                      pitch: Double(i % 10), usedAh: Double(i) / 3600 * 5, regenAh: 0)
+        }
+        let ride = Ride(board: "ow1", points: points)
+        let volts = try #require(ride.countedVolts)
+        #expect(abs(volts - 60) < 0.5)
+        #expect(ride.ampHours?.used == 5.0 / 60)
+        #expect(ride.peakPitch == 9)
     }
 
     @Test func climbPrefersBarometer() {

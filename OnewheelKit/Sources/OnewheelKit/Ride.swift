@@ -19,6 +19,13 @@ public struct RidePoint: Codable, Equatable, Sendable {
     /// Height from the phone's barometer, relative to where the ride began.
     /// Far steadier than GPS altitude, and kept when the GPS fix is dropped.
     public var climbM: Double?
+    /// Board pitch in degrees; positive is nose up, which pushback raises.
+    public var pitch: Double?
+    /// Amp-hours drawn from the pack since the ride began, counted by the
+    /// board itself rather than worked out from reported power.
+    public var usedAh: Double?
+    /// Amp-hours put back by braking and downhills, counted the same way.
+    public var regenAh: Double?
     /// Ride mode value as written to `302`; see `BoardModel.rideModes`.
     public var rideMode: UInt16?
     /// Raw `30f` status word: footpad zones, charging and error code.
@@ -27,7 +34,8 @@ public struct RidePoint: Codable, Equatable, Sendable {
     public init(time: Date, latitude: Double? = nil, longitude: Double? = nil, altitude: Double? = nil,
                 speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
                 motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil,
-                climbM: Double? = nil, rideMode: UInt16? = nil, status: UInt16? = nil) {
+                climbM: Double? = nil, rideMode: UInt16? = nil, status: UInt16? = nil,
+                pitch: Double? = nil, usedAh: Double? = nil, regenAh: Double? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
@@ -42,6 +50,9 @@ public struct RidePoint: Codable, Equatable, Sendable {
         self.climbM = climbM
         self.rideMode = rideMode
         self.status = status
+        self.pitch = pitch
+        self.usedAh = usedAh
+        self.regenAh = regenAh
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
@@ -128,9 +139,43 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     /// Energy put back by braking and downhills.
     public var regenWh: Double { integrateWatts { max(-$0, 0) } }
 
-    public var peakWatts: Double? { points.compactMap(\.watts).max() }
+    /// Highest sustained motor power. Power and speed are sampled on their
+    /// own clocks, so one sample can pair a spike with the wrong speed;
+    /// averaging three caps those without hiding a real burst.
+    public var peakWatts: Double? {
+        let watts = points.compactMap(\.watts)
+        guard watts.count >= 3 else { return watts.max() }
+        var peak = -Double.infinity
+        for i in 2..<watts.count {
+            peak = max(peak, (watts[i - 2] + watts[i - 1] + watts[i]) / 3)
+        }
+        return peak
+    }
 
     public var hasPower: Bool { points.contains { $0.watts != nil } }
+
+    /// The highest the nose got. Pushback and the haptic warning both lift it.
+    public var peakPitch: Double? { points.compactMap(\.pitch).max() }
+
+    /// Charge the board counted going out and coming back over the ride.
+    public var ampHours: (used: Double, regen: Double)? {
+        guard let used = points.compactMap(\.usedAh).last else { return nil }
+        return (used, points.compactMap(\.regenAh).last ?? 0)
+    }
+
+    /// Mean pack volts from the counters: the board's power figure is
+    /// sampled on its own clock and spikes, the counters aren't.
+    public var countedVolts: Double? {
+        guard let (used, regen) = ampHours, let wh = powerWh else { return nil }
+        let ampHours = used + regen
+        return ampHours > 0 ? wh / ampHours : nil
+    }
+
+    /// Energy either way, before regen is netted off.
+    private var powerWh: Double? {
+        guard hasPower else { return nil }
+        return energyWh + regenWh
+    }
 
     /// Wh per km over the ride, net of regen.
     public var whPerKm: Double? {
