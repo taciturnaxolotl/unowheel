@@ -58,7 +58,7 @@ public enum Characteristic: String, CaseIterable, Sendable {
     public static let telemetry: [Characteristic] = [
         .rideMode, .batteryPercent, .pitch, .roll, .yaw, .tripOdometer, .rpm,
         .lightingMode, .statusError, .temperature, .currentAmps, .tripAmpHours,
-        .tripRegenAmpHours, .batteryTemperature, .batteryVoltage, .safetyHeadroom,
+        .tripRegenAmpHours, .batteryTemperature, .batteryVoltage,
         .lifetimeOdometer, .lifetimeAmpHours, .batteryCells, .batteryLow5, .lastErrorCode,
     ]
 }

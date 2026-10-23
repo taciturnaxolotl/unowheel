@@ -10,9 +10,9 @@ import Foundation
 public struct PackVoltageEstimator: Sendable {
     struct Point {
         let date: Date
-        let amphourUnits: Int
+        let used: Int
+        let regen: Int
         let watts: Double
-        let discharging: Bool
     }
 
     private var points: [Point] = []
@@ -21,33 +21,35 @@ public struct PackVoltageEstimator: Sendable {
     /// Window long enough for the counters to move many units.
     static let window: TimeInterval = 30
     static let minimumWatts = 60.0
+    static let ampHoursPerUnit = 0.00018
 
     public init() {}
 
+    /// Riding flips between drawing power and regen every few seconds, so
+    /// both counters are summed: energy moved either way over charge moved
+    /// either way is still volts.
     public mutating func record(_ t: Telemetry, at date: Date = .now) {
         guard t.usesModernTelemetry, let watts = t.powerWatts,
               let used = t.tripAmpHoursRaw, let regen = t.tripRegenAmpHoursRaw else { return }
-        // Discharging moves 313, charging and regen move 314. Use whichever
-        // matches the direction of power flow.
-        let units = watts >= 0 ? used : regen
-        if let last = points.last, last.discharging != (watts >= 0) { points.removeAll() }
-        points.append(Point(date: date, amphourUnits: units, watts: abs(watts), discharging: watts >= 0))
+        points.append(Point(date: date, used: used, regen: regen, watts: abs(watts)))
         points.removeAll { date.timeIntervalSince($0.date) > Self.window * 2 }
 
         guard let first = points.first, date.timeIntervalSince(first.date) >= Self.window else { return }
         // A 16-bit counter wrapped or reset; start over.
-        guard units >= first.amphourUnits else {
+        guard used >= first.used, regen >= first.regen else {
             points = [points.last!]
             return
         }
-        let window = points
-        let averageWatts = window.map(\.watts).reduce(0, +) / Double(window.count)
-        let amphours = Double(units - first.amphourUnits) * 0.00018
         let hours = date.timeIntervalSince(first.date) / 3600
-        guard averageWatts >= Self.minimumWatts, amphours > 0, hours > 0 else { return }
-        let estimate = averageWatts / (amphours / hours)
-        // Only accept values a Onewheel pack could have.
-        guard (40...80).contains(estimate) else { return }
+        let wattHours = zip(points, points.dropFirst()).reduce(0.0) { total, pair in
+            total + (pair.0.watts + pair.1.watts) / 2 * pair.1.date.timeIntervalSince(pair.0.date) / 3600
+        }
+        let ampHours = Double(used - first.used + regen - first.regen) * Self.ampHoursPerUnit
+        guard wattHours / hours >= Self.minimumWatts, ampHours > 0 else { return }
+        let estimate = wattHours / ampHours
+        // Only accept what this pack could read, 3.0 to 4.25 V per cell.
+        let cells = Double(t.model.cellCount)
+        guard (cells * 3.0...cells * 4.25).contains(estimate) else { return }
         volts = volts.map { $0 * 0.7 + estimate * 0.3 } ?? estimate
     }
 }

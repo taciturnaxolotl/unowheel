@@ -19,11 +19,15 @@ public struct RidePoint: Codable, Equatable, Sendable {
     /// Height from the phone's barometer, relative to where the ride began.
     /// Far steadier than GPS altitude, and kept when the GPS fix is dropped.
     public var climbM: Double?
+    /// Ride mode value as written to `302`; see `BoardModel.rideModes`.
+    public var rideMode: UInt16?
+    /// Raw `30f` status word: footpad zones, charging and error code.
+    public var status: UInt16?
 
     public init(time: Date, latitude: Double? = nil, longitude: Double? = nil, altitude: Double? = nil,
                 speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
                 motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil,
-                climbM: Double? = nil) {
+                climbM: Double? = nil, rideMode: UInt16? = nil, status: UInt16? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
@@ -36,6 +40,8 @@ public struct RidePoint: Codable, Equatable, Sendable {
         self.batteryTempC = batteryTempC
         self.volts = volts
         self.climbM = climbM
+        self.rideMode = rideMode
+        self.status = status
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }

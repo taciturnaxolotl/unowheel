@@ -181,7 +181,9 @@ final class RideRecorder: NSObject {
                                      controllerTempC: t.controllerTemperatureC,
                                      batteryTempC: t.batteryTemperatureC,
                                      volts: volts,
-                                     climbM: climb))
+                                     climbM: climb,
+                                     rideMode: t.rideMode,
+                                     status: t.statusError))
         // The trip counter can arrive a moment after the ride starts.
         if tripStart == nil { tripStart = t.tripRevolutions }
         if let start = tripStart, let trip = t.tripRevolutions, trip >= start {

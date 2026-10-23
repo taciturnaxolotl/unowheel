@@ -29,7 +29,6 @@ public struct Telemetry: Equatable, Sendable, Codable {
     public var tripRevolutions: Int?
     public var lifetimeMiles: Int?
     public var lifetimeAmpHours: Int?
-    public var safetyHeadroom: Int?
     public var statusError: UInt16?
     public var lightsOn: Bool?
     public var battery = BatteryDiagnostics()
@@ -127,7 +126,6 @@ public struct Telemetry: Equatable, Sendable, Codable {
         case .tripOdometer: tripRevolutions = Int(value)
         case .lifetimeOdometer: lifetimeMiles = Int(value)
         case .lifetimeAmpHours: lifetimeAmpHours = Int(value)
-        case .safetyHeadroom: safetyHeadroom = Int(value)
         case .statusError: statusError = value
         case .lastErrorCode: battery.record(value)
         case .lightingMode: lightsOn = value == 1

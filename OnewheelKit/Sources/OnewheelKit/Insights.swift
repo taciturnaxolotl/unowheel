@@ -32,7 +32,8 @@ public struct EfficiencyModel: Equatable, Sendable {
     public let rides: Int
 
     static let minimumRides = 6
-    static let minimumKm = 0.5
+    /// Short rides count too; each is weighted by its distance.
+    static let minimumKm = 0.25
     /// Below this, cells start to lose capacity.
     static let comfortableC = 20.0
     /// Pulls slopes toward zero when the rides don't vary enough to pin them

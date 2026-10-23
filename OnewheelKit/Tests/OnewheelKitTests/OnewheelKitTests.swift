@@ -240,6 +240,25 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         #expect(abs(volts - 60.8) < 0.5)
     }
 
+    @Test func voltageWhileRidingWithRegen() throws {
+        // 58 V pack: 4 s drawing 580 W (10 A), then 2 s of 290 W regen (5 A), repeated.
+        var t = Telemetry()
+        t.apply(.hardwareRevision, data: WireValue.encode(5314))
+        t.apply(.firmwareRevision, data: WireValue.encode(5208))
+        var estimator = PackVoltageEstimator()
+        var used = 1000.0, regen = 500.0
+        for second in 0...60 {
+            let drawing = second % 6 < 4
+            t.apply(.batteryLow5, data: WireValue.encode(UInt16(bitPattern: drawing ? 580 : -290)))
+            t.apply(.tripAmpHours, data: WireValue.encode(UInt16(used)))
+            t.apply(.tripRegenAmpHours, data: WireValue.encode(UInt16(regen)))
+            estimator.record(t, at: Date(timeIntervalSince1970: Double(second)))
+            if drawing { used += 10 / 3600 / 0.00018 } else { regen += 5 / 3600 / 0.00018 }
+        }
+        let volts = try #require(estimator.volts)
+        #expect(abs(volts - 58) < 2)
+    }
+
     @Test func throttlesSamples() {
         let start = Date(timeIntervalSince1970: 0)
         var session = ChargeSession(startedAt: start)
