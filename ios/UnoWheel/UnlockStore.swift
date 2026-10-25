@@ -14,13 +14,7 @@ enum UnlockStore {
     private static let service = "sh.dunkirk.unowheel.unlock"
 
     static func entry(for board: String) -> UnlockEntry? {
-        var query = baseQuery(board)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode(UnlockEntry.self, from: data)
+        read(UnlockEntry.self, account: board)
     }
 
     static func response(for board: String, challenge: Challenge?) -> Data? {
@@ -30,24 +24,44 @@ enum UnlockStore {
     }
 
     static func save(_ response: Data, challenge: Challenge?, for board: String) {
-        let entry = UnlockEntry(challenge: challenge?.hex, response: response.hexString, savedAt: .now)
-        guard let data = try? JSONEncoder().encode(entry) else { return }
-        SecItemDelete(baseQuery(board) as CFDictionary)
-        var add = baseQuery(board)
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(add as CFDictionary, nil)
+        write(UnlockEntry(challenge: challenge?.hex, response: response.hexString, savedAt: .now), account: board)
     }
 
     static func remove(for board: String) {
         SecItemDelete(baseQuery(board) as CFDictionary)
     }
 
-    private static func baseQuery(_ board: String) -> [String: Any] {
+    /// Shared by every board, so it gets its own account.
+    static var pushIdentity: PushIdentity? {
+        get { read(PushIdentity.self, account: "~push-identity") }
+        set { write(newValue, account: "~push-identity") }
+    }
+
+    private static func read<T: Decodable>(_ type: T.Type, account: String) -> T? {
+        var query = baseQuery(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Replaces the item; nil deletes it.
+    private static func write<T: Encodable>(_ value: T?, account: String) {
+        SecItemDelete(baseQuery(account) as CFDictionary)
+        guard let value, let data = try? JSONEncoder().encode(value) else { return }
+        var add = baseQuery(account)
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    private static func baseQuery(_ account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: board.lowercased(),
+            kSecAttrAccount as String: account.lowercased(),
         ]
     }
 }

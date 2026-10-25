@@ -42,6 +42,8 @@ final class BoardConnection: NSObject {
         case waiting(String)
         case connecting(String)
         case handshaking
+        /// Waiting on Future Motion for this board's unlock code.
+        case fetchingCode
         case needsResponse
         case unlocked
         case failed(String)
@@ -68,6 +70,7 @@ final class BoardConnection: NSObject {
     var displayName: String? { nickname ?? boardName }
     private(set) var telemetry = Telemetry()
     private(set) var challenge: Challenge?
+    private(set) var fetchError: String?
     private(set) var log: [String] = []
     private(set) var range = RangeEstimator()
     private(set) var unlockedAt: Date?
@@ -97,7 +100,7 @@ final class BoardConnection: NSObject {
 
     var isConnected: Bool {
         switch phase {
-        case .connecting, .handshaking, .needsResponse, .unlocked: true
+        case .connecting, .handshaking, .fetchingCode, .needsResponse, .unlocked: true
         default: false
         }
     }
@@ -154,6 +157,7 @@ final class BoardConnection: NSObject {
             CBCentralManagerOptionRestoreIdentifierKey: "sh.dunkirk.unowheel.central",
         ])
         mirror.log = { [weak self] line in self?.record(line) }
+        warmUpPushIdentity()
         LightsBridge.handler = { [weak self] on in await self?.applyLights(on) }
         mirrorTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -557,7 +561,7 @@ final class BoardConnection: NSObject {
                     record("using saved response")
                     try await submit(saved, remember: false)
                 } else {
-                    phase = .needsResponse
+                    await fetchFromFutureMotion()
                 }
             case .none:
                 break
@@ -595,6 +599,38 @@ final class BoardConnection: NSObject {
         } catch BoardError.rejected {
             record("board rejected response")
             throw BoardError.rejected
+        }
+    }
+
+    /// Google delays or drops pushes to a token registered seconds ago, so register before it's needed.
+    private func warmUpPushIdentity() {
+        guard UnlockStore.pushIdentity == nil else { return }
+        Task {
+            guard let identity = try? await PushIdentity.register(), UnlockStore.pushIdentity == nil else { return }
+            UnlockStore.pushIdentity = identity
+        }
+    }
+
+    /// Asks Future Motion for the response; it arrives as a push, as it does for the official Android app.
+    func fetchFromFutureMotion() async {
+        guard let name = boardName, let challenge else { return }
+        phase = .fetchingCode
+        fetchError = nil
+        record("asking Future Motion for the unlock code")
+        do {
+            let (response, identity) = try await Activation.fetchResponse(
+                board: name, challenge: challenge, identity: UnlockStore.pushIdentity
+            ) { [weak self] line in
+                Task { @MainActor in self?.record(line) }
+            }
+            UnlockStore.pushIdentity = identity
+            record("Future Motion sent \(response.spacedHex)")
+            try await submit(response)
+        } catch is CancellationError {
+        } catch {
+            record("fetching the code failed: \(error.localizedDescription)")
+            fetchError = error.localizedDescription
+            phase = .needsResponse
         }
     }
 

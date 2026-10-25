@@ -136,6 +136,8 @@ struct BoardView: View {
             ProgressRow(text: "Connecting to \(name)")
         case .handshaking:
             ProgressRow(text: "Unlocking")
+        case .fetchingCode:
+            ProgressRow(text: "Asking Future Motion for the unlock code")
         case .needsResponse:
             Label("Locked", systemImage: "lock.fill")
                 .foregroundStyle(.secondary)

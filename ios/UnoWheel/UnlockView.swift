@@ -15,8 +15,18 @@ struct UnlockView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("This board needs an unlock code from the official Onewheel app.")
+                    Text("UnoWheel couldn't get this board's unlock code from Future Motion. Try again, or bring one from the official Onewheel app.")
                         .font(.callout)
+                }
+
+                Section {
+                    Button("Ask Future Motion again", systemImage: "arrow.clockwise") { fetch() }
+                        .disabled(working || connection.challenge == nil)
+                    if let fetchError = connection.fetchError {
+                        Text(fetchError).font(.caption).foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Needs an internet connection. The code arrives as a push notification to UnoWheel, the same way it reaches the official app.")
                 }
 
                 if let challenge = connection.challenge {
@@ -93,6 +103,15 @@ struct UnlockView: View {
             }
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    private func fetch() {
+        error = nil
+        working = true
+        Task {
+            defer { working = false }
+            await connection.fetchFromFutureMotion()
         }
     }
 

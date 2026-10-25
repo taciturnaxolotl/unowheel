@@ -14,6 +14,7 @@ The canonical repo for this is hosted on tangled over at [`https://tangled.org/d
 | `ios/` | The app and its widget extension. `project.yml` is the source of truth; the Xcode project is generated from it. |
 | `tools/icon.swift` | Draws the app icon (light, dark and tinted). Run `swift tools/icon.swift` from the repo root. |
 | `tools/ow_unlock.py` | Python and bleak probe for poking a board from a Mac. |
+| `tools/ow_activate.py` | Fetches a board's unlock response from Future Motion, stdlib only. |
 | `docs/protocol.md` | Protocol notes: what was measured, what was decompiled, and what is still unknown. |
 
 ## Building
@@ -26,13 +27,11 @@ open ios/UnoWheel.xcodeproj           # run on a real phone; the simulator has n
 
 ## Unlocking a board
 
-Boards on firmware 4141 and up, which includes every Pint, only accept a response that Future Motion's server issues once per board. The board's challenge never changes, so you only need that response once:
+Boards on firmware 4141 and up, which includes every Pint, only accept a response that Future Motion's server issues once per board. The board's challenge never changes, so you only need that response once.
 
-1. Record the official app connecting to the board, using the iOS Bluetooth logging profile and PacketLogger.
-2. In UnoWheel, connect to the board and choose **Import PacketLogger capture**. Or paste the 40 hex characters yourself.
-3. UnoWheel keeps the response in the Keychain and unlocks the board by itself from then on.
+UnoWheel gets it the way the official Android app does: it sends the challenge to Future Motion, and the answer comes back as a push notification. UnoWheel registers for those pushes as the Android app and listens on Google's push socket while it waits, so this needs an internet connection the first time and no account. The response goes in the Keychain and the board unlocks by itself from then on. See `docs/protocol.md`, "Fetching the response".
 
-Why not sign in with a Future Motion account and fetch the response directly? The official app sends the challenge to Future Motion's servers, and the answer comes back as a Firebase push notification sent to Future Motion's own Firebase project. A third-party app can't receive those pushes, so the one-time capture is the dependable route. See `docs/protocol.md`.
+If that fails, you can still bring the response yourself: record the official app connecting with the iOS Bluetooth logging profile and PacketLogger, then choose **Import capture** in UnoWheel, or paste the 40 hex characters.
 
 ## Riding
 
