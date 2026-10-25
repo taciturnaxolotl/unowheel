@@ -376,13 +376,88 @@ let hydrusResponse = Handshake.parseHex("09 8e 56 04 11 2b 0b db 29 44 e7 24 28 
         // 60 V pack at 300 W for 60 s: 5 Wh and 5/60 Ah.
         let points = (0...60).map { i in
             RidePoint(time: Date(timeIntervalSince1970: Double(i)), speedKPH: 20, watts: 300,
-                      pitch: Double(i % 10), usedAh: Double(i) / 3600 * 5, regenAh: 0)
+                      usedAh: Double(i) / 3600 * 5, regenAh: 0)
         }
         let ride = Ride(board: "ow1", points: points)
         let volts = try #require(ride.countedVolts)
         #expect(abs(volts - 60) < 0.5)
         #expect(ride.ampHours?.used == 5.0 / 60)
-        #expect(ride.peakPitch == 9)
+    }
+
+    @Test func findsPushbackAndIgnoresCarrying() throws {
+        // Level until 21 km/h, then the nose lifts (negative pitch). Last,
+        // the board is lifted by the nose and the free wheel spins up.
+        let speeds: [(Double, Double, UInt16)] = [(10, 0, 0x0700), (16, -2.7, 0x0700), (18, -0.2, 0x0700), (21, -0.5, 0x0700),
+                                                  (22, -3, 0x0700), (23.5, -6, 0x0700), (20, -1, 0x0700),
+                                                  (36, -40, 0x0100), (24, -0.4, 0x0100), (30, 0, 0x0000)]
+        let ride = Ride(board: "ow1", points: speeds.enumerated().map {
+            RidePoint(time: Date(timeIntervalSince1970: Double($0.offset)), speedKPH: $0.element.0,
+                      status: $0.element.2, pitch: $0.element.1)
+        }).cleanedRoute()
+        #expect(ride.pushbackKPH == 22)
+        #expect(ride.topSpeedKPH == 23.5)
+        #expect(ride.peakNoseUp == 6)
+    }
+
+    @Test func dropsIndoorFixes() {
+        let metresPerDegree = 111_000.0
+        var points: [RidePoint] = []
+        var lat = 40.0
+        // 60 s outside, a fix a second, then 60 s inside with a wandering
+        // fix every 4 s, then 60 s outside again. 10 km/h throughout.
+        for second in 0..<180 {
+            let inside = (60..<120).contains(second)
+            lat += 2.8 / metresPerDegree
+            let wander = Double(second % 8 < 4 ? 3 : -3) / metresPerDegree
+            let fix = !inside || second.isMultiple(of: 4)
+            points.append(RidePoint(time: Date(timeIntervalSince1970: Double(second)),
+                                    latitude: fix ? (inside ? 40.0 + 170 / metresPerDegree + wander : lat) : nil,
+                                    longitude: fix ? -83 : nil, speedKPH: 10))
+        }
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[60..<120].allSatisfy { !$0.hasLocation })
+        #expect(clean.points[5..<45].allSatisfy { $0.hasLocation })
+        #expect(clean.points[135..<175].allSatisfy { $0.hasLocation })
+    }
+
+    @Test func keepsRawTrackOfIndoorRide() {
+        // 3 minutes riding laps inside: a Wi-Fi fix every 4 s, wandering 5 m.
+        let points = (0..<180).map { second in
+            RidePoint(time: Date(timeIntervalSince1970: Double(second)),
+                      latitude: second.isMultiple(of: 4) ? 40 + Double(second % 8) * 0.000006 : nil,
+                      longitude: second.isMultiple(of: 4) ? -83 : nil, speedKPH: 10)
+        }
+        let raw = Ride(board: "ow1", points: points)
+        let clean = raw.cleanedRoute()
+        #expect(clean.routeQuality == .lowSignal)
+        #expect(clean.points == raw.points)
+        #expect(raw.routeQuality == .good)
+    }
+
+    @Test func keepsGoodFixesAroundADropout() {
+        // A fix a second for 40 s, then GPS stops reporting for 60 s at speed.
+        let points = (0..<100).map { second in
+            RidePoint(time: Date(timeIntervalSince1970: Double(second)),
+                      latitude: second < 40 ? 40 + Double(second) * 0.00006 : nil,
+                      longitude: second < 40 ? -83 : nil, speedKPH: 23)
+        }
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[0..<40].allSatisfy { $0.hasLocation })
+        #expect(clean.routeQuality == .droppedOut)
+        let whole = Ride(board: "ow1", points: Array(points.prefix(40)))
+        #expect(whole.cleanedRoute().routeQuality == .good)
+    }
+
+    @Test func dropsStalledFixes() {
+        // Fixes keep coming every second but barely move while the wheel turns.
+        let points = (0..<90).map { second in
+            let stalled = (30..<60).contains(second)
+            let lat = stalled ? 40 + 30 * 0.00003 + Double(second % 2) * 0.000005 : 40 + Double(second) * 0.00003
+            return RidePoint(time: Date(timeIntervalSince1970: Double(second)), latitude: lat, longitude: -83, speedKPH: 10)
+        }
+        let clean = Ride(board: "ow1", points: points).cleanedRoute()
+        #expect(clean.points[35..<55].allSatisfy { !$0.hasLocation })
+        #expect(clean.points[0..<10].allSatisfy { $0.hasLocation })
     }
 
     @Test func climbPrefersBarometer() {

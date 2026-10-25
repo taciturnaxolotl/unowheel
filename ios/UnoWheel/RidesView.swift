@@ -8,6 +8,8 @@ struct RidesView: View {
     @AppStorage("useMetric") private var useMetric = Locale.current.measurementSystem == .metric
 
     @State private var confirmingDiscard = false
+    /// Set from the `-openRide <id prefix>` launch argument in debug builds, for screenshots.
+    @State private var openedRide: UUID?
 
     private var rides: [Ride] { connection.rides.rides(for: connection.boardName) }
 
@@ -60,6 +62,16 @@ struct RidesView: View {
             }
         }
         .navigationTitle("Rides")
+        #if DEBUG
+        .navigationDestination(item: $openedRide) { id in
+            if let ride = rides.first(where: { $0.id == id }) { RideDetailView(ride: ride) }
+        }
+        .onAppear {
+            // Launch arguments of the form `-key value` land in UserDefaults.
+            guard let prefix = UserDefaults.standard.string(forKey: "openRide") else { return }
+            openedRide = rides.first { $0.id.uuidString.hasPrefix(prefix) }?.id
+        }
+        #endif
         .confirmationDialog("Discard this ride?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
             Button("Discard", role: .destructive) { connection.endRide(save: false) }
         }
@@ -144,6 +156,13 @@ struct RideDetailView: View {
                     RideMap(ride: ride)
                         .frame(height: 320)
                         .clipShape(.rect(cornerRadius: 24))
+                } else {
+                    Label("No map. The phone recorded no location for this ride; check location access.", systemImage: "location.slash")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.fill.tertiary, in: .rect(cornerRadius: 16))
                 }
                 stats
                 if ride.points.count > 2 { RideCharts(ride: ride) }
@@ -195,8 +214,8 @@ struct RideDetailView: View {
                     RideStat(title: "Peak power", value: String(format: "%.0f W", peak))
                 }
             }
-            if let pitch = ride.peakPitch, pitch > 3 {
-                RideStat(title: "Peak nose up", value: String(format: "%.0f°", pitch))
+            if let pushback = ride.pushbackKPH {
+                RideStat(title: "Pushback from", value: formatSpeed(pushback, metric: useMetric))
             }
             if let weather = ride.weather {
                 RideStat(title: "Weather", value: formatWeather(weather, metric: useMetric))
@@ -229,7 +248,7 @@ private struct RideCharts: View {
             case .power: ride.hasPower
             case .battery: ride.points.contains { $0.batteryPercent != nil }
             case .temperature: ride.maxMotorTempC != nil
-            case .pitch: ride.peakPitch != nil
+            case .pitch: ride.peakNoseUp != nil
             }
         }
     }
@@ -265,7 +284,7 @@ private struct RideCharts: View {
         case .battery:
             line(points.compactMap { p in p.batteryPercent.map { (p.time, Double($0)) } }, color: .green, unit: "%")
         case .pitch:
-            line(points.compactMap { p in p.pitch.map { (p.time, $0) } }, color: .purple, unit: "°")
+            line(points.compactMap { p in p.noseUp.map { (p.time, $0) } }, color: .purple, unit: "°")
         case .temperature:
             let convert: (Int) -> Double = { useMetric ? Double($0) : Double($0) * 9 / 5 + 32 }
             Chart {
@@ -349,6 +368,25 @@ private struct RideMap: View {
         }
         .mapStyle(.standard(elevation: .realistic, emphasis: .muted, pointsOfInterest: .excludingAll))
         .overlay(alignment: .bottomTrailing) { SpeedLegend().padding(10) }
+        .overlay(alignment: .topLeading) {
+            if let warning = ride.routeQuality.warning {
+                Label(warning, systemImage: "location.slash")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(.ultraThinMaterial, in: .capsule)
+                    .padding(10)
+            }
+        }
+    }
+}
+
+extension RouteQuality {
+    var warning: String? {
+        switch self {
+        case .good: nil
+        case .droppedOut: "GPS dropped out"
+        case .lowSignal: "Low GPS signal"
+        }
     }
 }
 

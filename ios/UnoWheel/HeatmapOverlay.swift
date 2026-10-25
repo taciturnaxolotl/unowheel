@@ -16,7 +16,8 @@ final class HeatmapOverlay: NSObject, MKOverlay, @unchecked Sendable {
     }
 
     init(rides: [Ride]) {
-        tracks = rides.compactMap { HeatRaster.Track(ride: $0) }
+        // A raw indoor track is a scribble that would glow like a busy path.
+        tracks = rides.filter { $0.routeQuality != .lowSignal }.compactMap { HeatRaster.Track(ride: $0) }
         palette = HeatRaster.Palette(brightest: tracks.count)
         boundingMapRect = tracks.reduce(MKMapRect.null) { $0.union($1.rect) }
     }

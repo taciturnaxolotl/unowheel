@@ -19,8 +19,11 @@ public struct RidePoint: Codable, Equatable, Sendable {
     /// Height from the phone's barometer, relative to where the ride began.
     /// Far steadier than GPS altitude, and kept when the GPS fix is dropped.
     public var climbM: Double?
-    /// Board pitch in degrees; positive is nose up, which pushback raises.
+    /// Board pitch in degrees as reported; nose up reads negative.
     public var pitch: Double?
+    /// GPS fix accuracy in metres, for tuning the route cleanup. Present
+    /// without a location when a fix arrived but was too poor to use.
+    public var accuracyM: Double?
     /// Amp-hours drawn from the pack since the ride began, counted by the
     /// board itself rather than worked out from reported power.
     public var usedAh: Double?
@@ -35,7 +38,7 @@ public struct RidePoint: Codable, Equatable, Sendable {
                 speedKPH: Double, batteryPercent: Int? = nil, watts: Double? = nil,
                 motorTempC: Int? = nil, controllerTempC: Int? = nil, batteryTempC: Int? = nil, volts: Double? = nil,
                 climbM: Double? = nil, rideMode: UInt16? = nil, status: UInt16? = nil,
-                pitch: Double? = nil, usedAh: Double? = nil, regenAh: Double? = nil) {
+                pitch: Double? = nil, usedAh: Double? = nil, regenAh: Double? = nil, accuracyM: Double? = nil) {
         self.time = time
         self.latitude = latitude
         self.longitude = longitude
@@ -53,9 +56,22 @@ public struct RidePoint: Codable, Equatable, Sendable {
         self.pitch = pitch
         self.usedAh = usedAh
         self.regenAh = regenAh
+        self.accuracyM = accuracyM
     }
 
     public var hasLocation: Bool { latitude != nil && longitude != nil }
+
+    /// Degrees the nose is tilted up. Pushback lifts it.
+    public var noseUp: Double? { pitch.map { -$0 } }
+
+    /// Off the pad or lifted by the nose, the wheel spins freely.
+    public var isRidden: Bool {
+        let level = pitch.map { abs($0) < Self.levelDegrees } ?? true
+        let onPad = status.map(BoardStatus.init(raw:)).map { $0.riderDetected && ($0.frontPad || $0.backPad) } ?? true
+        return level && onPad
+    }
+
+    static let levelDegrees = 15.0
 
     mutating func dropLocation() {
         latitude = nil
@@ -79,6 +95,12 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var customTitle: String?
     /// Weather where and when the ride started, looked up after the ride.
     public var weather: Weather?
+    /// Set by `cleanedRoute`; worked out on load, never saved.
+    public internal(set) var routeQuality = RouteQuality.good
+
+    private enum CodingKeys: String, CodingKey {
+        case id, board, points, odometerKm, startPlace, endPlace, customTitle, weather
+    }
 
     public init(id: UUID = UUID(), board: String, points: [RidePoint] = [], odometerKm: Double? = nil) {
         self.id = id
@@ -91,6 +113,9 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
     public var endedAt: Date { points.last?.time ?? .distantPast }
     public var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
 
+    /// Below this the board is standing still, or being carried.
+    public static let movingKPH = 2.0
+
     public var topSpeedKPH: Double { points.map(\.speedKPH).max() ?? 0 }
 
     /// Time spent above walking pace.
@@ -101,21 +126,8 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    public var gpsKm: Double {
-        let located = points.filter(\.hasLocation)
-        return zip(located, located.dropFirst()).reduce(0) { total, pair in
-            total + Self.haversineKm(pair.0, pair.1)
-        }
-    }
-
-    /// Distance from wheel speed over time. Matches the odometer within a
-    /// couple of percent, where GPS can be far off near buildings.
-    public var wheelKm: Double {
-        zip(points, points.dropFirst()).reduce(0) { total, pair in
-            let gap = pair.1.time.timeIntervalSince(pair.0.time)
-            return gap < 10 ? total + pair.0.speedKPH * gap / 3600 : total
-        }
-    }
+    public var gpsKm: Double { points.gpsKm }
+    public var wheelKm: Double { points.wheelKm }
 
     /// The odometer when it was read, then wheel speed. GPS only for rides
     /// with no speed at all.
@@ -154,8 +166,22 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
 
     public var hasPower: Bool { points.contains { $0.watts != nil } }
 
-    /// The highest the nose got. Pushback and the haptic warning both lift it.
-    public var peakPitch: Double? { points.compactMap(\.pitch).max() }
+    public var peakNoseUp: Double? { points.compactMap(\.noseUp).max() }
+
+    /// Lowest speed the nose stayed lifted at; a bump lifts it for one sample only.
+    public var pushbackKPH: Double? {
+        func lifted(_ i: Int, by degrees: Double) -> Bool {
+            points.indices.contains(i) && (points[i].noseUp ?? 0) >= degrees
+        }
+        return points.indices.filter { i in
+            points[i].speedKPH >= Self.pushbackMinimumKPH && lifted(i, by: Self.pushbackNoseUp)
+                && (lifted(i - 1, by: Self.pushbackNoseUp / 2) || lifted(i + 1, by: Self.pushbackNoseUp / 2))
+        }.map { points[$0].speedKPH }.min()
+    }
+
+    static let pushbackNoseUp = 2.0
+    /// Slower than this, a lifted nose is the rider, not the board.
+    static let pushbackMinimumKPH = 15.0
 
     /// Charge the board counted going out and coming back over the ride.
     public var ampHours: (used: Double, regen: Double)? {
@@ -275,81 +301,6 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
         return segments.filter { $0.points.count >= 2 }
     }
 
-    /// Drops GPS fixes that can't be part of the ride, keeping board data
-    /// for every point. Tuned on real rides that went in and out of buildings.
-    public func cleanedRoute() -> Ride {
-        droppingCarriedFixes().droppingFrozenFixes().droppingStrandedFixes()
-    }
-
-    /// Below this the board is standing still, or being carried.
-    public static let movingKPH = 2.0
-    private static let carriedAfter: TimeInterval = 3
-    private static let frozenRun = 4
-    private static let trustedJumpGap: TimeInterval = 10
-    private static let jumpSlack = 1.5
-    private static let jumpToleranceKm = 0.05
-    private static let strandedRun = 10
-
-    /// Fixes once the board has been still for a few seconds: it's being
-    /// carried inside. The first stopped fixes are kept; that's where you stopped.
-    private func droppingCarriedFixes() -> Ride {
-        var copy = self
-        var stillSince: Date?
-        for i in copy.points.indices {
-            guard copy.points[i].speedKPH < Self.movingKPH else {
-                stillSince = nil
-                continue
-            }
-            let since = stillSince ?? copy.points[i].time
-            stillSince = since
-            if copy.points[i].time.timeIntervalSince(since) > Self.carriedAfter { copy.points[i].dropLocation() }
-        }
-        return copy
-    }
-
-    /// iOS keeps reporting the last fix when it loses the sky. A coordinate
-    /// held for several samples is stale throughout; a brief repeat keeps its first.
-    private func droppingFrozenFixes() -> Ride {
-        var copy = self
-        let runs = locatedRuns { a, b in points[a].latitude != points[b].latitude || points[a].longitude != points[b].longitude }
-        for run in runs {
-            (run.count >= Self.frozenRun ? run[...] : run.dropFirst()).forEach { copy.points[$0].dropLocation() }
-        }
-        return copy
-    }
-
-    /// A short run cut off from the rest by a jump the board couldn't have
-    /// made, like the first fixes after stepping outside. After a long gap
-    /// in fixes a jump is expected, so it's trusted.
-    private func droppingStrandedFixes() -> Ride {
-        let runs = locatedRuns { a, b in
-            let seconds = points[b].time.timeIntervalSince(points[a].time)
-            let fastest = points[a...b].map(\.speedKPH).max() ?? 0
-            let reachableKm = fastest * max(seconds, 1) / 3600 * Self.jumpSlack + Self.jumpToleranceKm
-            return seconds < Self.trustedJumpGap && Self.haversineKm(points[a], points[b]) > reachableKm
-        }
-        let longest = runs.map(\.count).max() ?? 0
-        var copy = self
-        for run in runs where run.count < longest && run.count < Self.strandedRun {
-            run.forEach { copy.points[$0].dropLocation() }
-        }
-        return copy
-    }
-
-    /// Indices of located points in runs; a new run starts wherever
-    /// `breaks(previous, next)` is true.
-    private func locatedRuns(breakingWhere breaks: (Int, Int) -> Bool) -> [[Int]] {
-        var runs: [[Int]] = []
-        for i in points.indices where points[i].hasLocation {
-            if let last = runs.last?.last, !breaks(last, i) {
-                runs[runs.count - 1].append(i)
-            } else {
-                runs.append([i])
-            }
-        }
-        return runs
-    }
-
     /// GPS jitters a few metres; a short moving average makes the line
     /// read as the path you actually rode. Speed is left as recorded.
     public func smoothed(window: Int = 5) -> Ride {
@@ -374,5 +325,20 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
         let h = sin(dLat / 2) * sin(dLat / 2)
             + cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) * sin(dLon / 2) * sin(dLon / 2)
         return 2 * r * asin(min(1, sqrt(h)))
+    }
+}
+
+extension Collection where Element == RidePoint {
+    public var gpsKm: Double {
+        let located = filter(\.hasLocation)
+        return zip(located, located.dropFirst()).reduce(0) { $0 + Ride.haversineKm($1.0, $1.1) }
+    }
+
+    /// Distance from wheel speed over time; matches the odometer within a couple of percent.
+    public var wheelKm: Double {
+        zip(self, dropFirst()).reduce(0) { total, pair in
+            let gap = pair.1.time.timeIntervalSince(pair.0.time)
+            return gap < 10 ? total + pair.0.speedKPH * gap / 3600 : total
+        }
     }
 }

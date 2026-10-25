@@ -112,7 +112,13 @@ final class RideRecorder: NSObject {
     private(set) var current: Ride?
     private var tripStart: Int?
     private var lastMoving = Date.distantPast
-    private var lastLocation: CLLocation?
+    /// Latest fix, good or not. Each is used once: indoors no new fixes
+    /// arrive, and repeating the last one pins the route to a doorway.
+    private var lastFix: CLLocation?
+    private static let fixFreshness: TimeInterval = 3
+    /// Fixes less accurate than this are recorded as accuracy only, which
+    /// tells a weak signal apart from no fixes at all.
+    private static let usableAccuracyM: CLLocationAccuracy = 20
     private let altimeter = CMAltimeter()
     /// Latest barometric height since the ride began, in metres.
     private var climb: Double?
@@ -138,6 +144,9 @@ final class RideRecorder: NSObject {
         manager.activityType = .otherNavigation
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = kCLDistanceFilterNone
+        // iOS can mistake a smooth board ride for sitting still and pause
+        // updates, and they don't come back while the phone is locked.
+        manager.pausesLocationUpdatesAutomatically = false
     }
 
     var isRecording: Bool { current != nil }
@@ -170,10 +179,9 @@ final class RideRecorder: NSObject {
             start(board: board, telemetry: t, now: now)
         }
         guard var ride = current else { return }
-        // Each fix is used once: indoors no new fixes arrive, and repeating
-        // the last one pins the route to a doorway.
-        let location = lastLocation.flatMap { now.timeIntervalSince($0.timestamp) < 3 ? $0 : nil }
-        lastLocation = nil
+        let fix = lastFix.flatMap { now.timeIntervalSince($0.timestamp) < Self.fixFreshness ? $0 : nil }
+        let location = fix.flatMap { $0.horizontalAccuracy <= Self.usableAccuracyM ? $0 : nil }
+        lastFix = nil
         ride.points.append(RidePoint(time: now,
                                      latitude: location?.coordinate.latitude,
                                      longitude: location?.coordinate.longitude,
@@ -190,7 +198,8 @@ final class RideRecorder: NSObject {
                                      status: t.statusError,
                                      pitch: t.pitch,
                                      usedAh: usedAh,
-                                     regenAh: regenAh))
+                                     regenAh: regenAh,
+                                     accuracyM: fix?.horizontalAccuracy))
         countAmpHours(t)
         // The trip counter can arrive a moment after the ride starts.
         if tripStart == nil { tripStart = t.tripRevolutions }
@@ -301,16 +310,23 @@ final class RideRecorder: NSObject {
         manager.allowsBackgroundLocationUpdates = false
         backgroundSession?.invalidate()
         backgroundSession = nil
-        lastLocation = nil
+        lastFix = nil
     }
 }
 
 extension RideRecorder: @preconcurrency CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        // Indoors and just after stepping outside, fixes come back with poor
-        // accuracy; only trust ones within 20 m.
-        guard let latest = locations.last, latest.horizontalAccuracy >= 0, latest.horizontalAccuracy <= 20 else { return }
-        lastLocation = latest
+        guard let latest = locations.last, latest.horizontalAccuracy >= 0 else { return }
+        lastFix = latest
+    }
+
+    func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        log("location paused by iOS, restarting")
+        if isRecording { manager.startUpdatingLocation() }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: any Error) {
+        log("location error: \(error.localizedDescription)")
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
