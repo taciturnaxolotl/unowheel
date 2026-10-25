@@ -271,6 +271,10 @@ A board that connects showing `0xFFF0` or above, or `0` on non-GT boards, is sit
 - How the server turns the seed into the key. Presumably an RSA signature; the app's errors call it `RsaException`.
 - What the board checks before setting `31f`.
 
+### Getting the firmware image is blocked, 2026-10-25
+
+`fwBlUpdate`, `customFirmware`, `otaKey` and the owner-portal board commands all answer `403 access_forbidden` (FM's own application response, not Cloudflare), while `activation`, `state` and `report` work from the same machine. Tried and ruled out: anonymous vs. logged-in account (the account works, the board is registered to it), the app's fallback credentials, correct `userId`, every `owType`/`fw`/`hw` combination, user agent, Python vs. Apple's TLS stack, gzip, the stats `hash` token, Firebase headers, and bogus board IDs (same error, so the denial happens before the board lookup). Either the endpoint is gated on something not visible in the request, or firmware distribution is closed server-side right now; the version endpoint calls 2.6.67 current while 2.6.85 is on APK mirrors, so a migration is plausible. Retrying later, or from a different network, are the cheapest next probes. `tools/ow_firmware.py` is ready: it logs in with a Onewheel account (`OW_EMAIL`/`OW_PASSWORD`), downloads and verifies the images, and saves them.
+
 ## Replay
 
 The challenge is fixed per board and the board accepts the same response every time, so one captured response unlocks it indefinitely. No server is involved after that first capture. `tools/ow_unlock.py` caches responses in `~/.config/unowheel/handshakes.json`, keyed by challenge.
