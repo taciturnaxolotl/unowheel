@@ -9,5 +9,7 @@
 	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>UnoWheel rings an alarm mid-ride when it's time to head home for curfew.</string>
 </dict>
 </plist>

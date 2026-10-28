@@ -130,6 +130,7 @@ final class BoardConnection: NSObject {
         return recorder
     }()
     private(set) var isRecording = false
+    let curfew = CurfewWatch()
 
     func endRide(save: Bool) {
         recorder.end(save: save)
@@ -157,6 +158,7 @@ final class BoardConnection: NSObject {
             CBCentralManagerOptionRestoreIdentifierKey: "sh.dunkirk.unowheel.central",
         ])
         mirror.log = { [weak self] line in self?.record(line) }
+        curfew.log = { [weak self] line in self?.record(line) }
         warmUpPushIdentity()
         LightsBridge.handler = { [weak self] on in await self?.applyLights(on) }
         mirrorTask = Task { [weak self] in
@@ -173,6 +175,7 @@ final class BoardConnection: NSObject {
         lastTick = now
         recorder.update(board: boardName, telemetry: telemetry, volts: packVolts, live: isLive, now: now)
         if isRecording != recorder.isRecording { isRecording = recorder.isRecording }
+        curfew.update(location: recorder.latestFix, now: now)
         guard isConnected else { return }
         if phase == .unlocked { voltage.record(telemetry, at: now) }
         charges.update(board: boardName, telemetry: telemetry, volts: packVolts, live: phase == .unlocked)

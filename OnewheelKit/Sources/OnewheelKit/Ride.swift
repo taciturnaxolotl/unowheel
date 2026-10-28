@@ -319,13 +319,17 @@ public struct Ride: Codable, Identifiable, Equatable, Sendable {
 
     static func haversineKm(_ a: RidePoint, _ b: RidePoint) -> Double {
         guard let lat1 = a.latitude, let lon1 = a.longitude, let lat2 = b.latitude, let lon2 = b.longitude else { return 0 }
-        let r = 6371.0
-        let dLat = (lat2 - lat1) * .pi / 180
-        let dLon = (lon2 - lon1) * .pi / 180
-        let h = sin(dLat / 2) * sin(dLat / 2)
-            + cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) * sin(dLon / 2) * sin(dLon / 2)
-        return 2 * r * asin(min(1, sqrt(h)))
+        return greatCircleMeters(lat1, lon1, lat2, lon2) / 1000
     }
+}
+
+/// Haversine distance between two coordinates in degrees.
+func greatCircleMeters(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
+    let dLat = (lat2 - lat1) * .pi / 180
+    let dLon = (lon2 - lon1) * .pi / 180
+    let h = sin(dLat / 2) * sin(dLat / 2)
+        + cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) * sin(dLon / 2) * sin(dLon / 2)
+    return 2 * 6_371_000 * asin(min(1, sqrt(h)))
 }
 
 extension Collection where Element == RidePoint {

@@ -9,6 +9,7 @@ struct BoardView: View {
     @State private var renaming = false
     @State private var draftName = ""
     @State private var addingBoard = false
+    @State private var showingCurfew = false
     @State private var showingRides = CommandLine.arguments.contains("-open-rides")
 
     private var t: Telemetry { connection.shown }
@@ -20,6 +21,7 @@ struct BoardView: View {
                 if connection.hasData {
                     if connection.isLive, let error = t.status?.error { errorBanner(error) }
                     if connection.isLive, let faults = t.status?.faults, !faults.isEmpty { faultBanner(faults) }
+                    if let curfew = connection.curfew.status { curfewBanner(curfew) }
                     if connection.isLive, t.isCharging { chargingCard } else { speedAndBattery }
                     controls
                         .disabled(!connection.isLive)
@@ -61,6 +63,7 @@ struct BoardView: View {
                         .pickerStyle(.menu)
                     }
                     Button("Connection log", systemImage: "text.alignleft") { showingLog = true }
+                    Button("Curfew", systemImage: "moon.zzz") { showingCurfew = true }
                     Button("Forget unlock code", systemImage: "key.slash", role: .destructive) {
                         connection.forgetResponse()
                     }
@@ -80,6 +83,9 @@ struct BoardView: View {
         }
         .sheet(isPresented: $showingLog) {
             LogView()
+        }
+        .sheet(isPresented: $showingCurfew) {
+            CurfewView()
         }
         .navigationDestination(isPresented: $showingRides) { RidesView() }
         .sheet(isPresented: $addingBoard) {
@@ -293,6 +299,23 @@ struct BoardView: View {
         .background(.orange.opacity(0.15), in: .rect(cornerRadius: 20))
         .transition(.move(edge: .top).combined(with: .opacity))
         .sensoryFeedback(.warning, trigger: error.code)
+    }
+
+    private func curfewBanner(_ curfew: Curfew.Status) -> some View {
+        let urgent = curfew.warning != nil
+        return HStack(spacing: 12) {
+            Image(systemName: urgent ? "exclamationmark.triangle.fill" : "moon.zzz")
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(curfew.headline).font(.subheadline.weight(.semibold))
+                Text(curfew.detail).font(.caption).opacity(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(urgent ? .orange : .secondary)
+        .padding(14)
+        .background(urgent ? AnyShapeStyle(.orange.opacity(0.15)) : AnyShapeStyle(.fill.quaternary), in: .rect(cornerRadius: 18))
+        .sensoryFeedback(.warning, trigger: urgent)
     }
 
     private func faultBanner(_ faults: [String]) -> some View {

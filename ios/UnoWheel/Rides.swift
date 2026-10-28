@@ -115,6 +115,8 @@ final class RideRecorder: NSObject {
     /// Latest fix, good or not. Each is used once: indoors no new fixes
     /// arrive, and repeating the last one pins the route to a doorway.
     private var lastFix: CLLocation?
+    /// Last usable fix while a ride is on; nil otherwise.
+    private(set) var latestFix: CLLocation?
     private static let fixFreshness: TimeInterval = 3
     /// Fixes less accurate than this are recorded as accuracy only, which
     /// tells a weak signal apart from no fixes at all.
@@ -311,6 +313,7 @@ final class RideRecorder: NSObject {
         backgroundSession?.invalidate()
         backgroundSession = nil
         lastFix = nil
+        latestFix = nil
     }
 }
 
@@ -318,6 +321,7 @@ extension RideRecorder: @preconcurrency CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last, latest.horizontalAccuracy >= 0 else { return }
         lastFix = latest
+        if latest.horizontalAccuracy <= Self.usableAccuracyM { latestFix = latest }
     }
 
     func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {

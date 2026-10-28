@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0FB10EAA342698143C911A8F /* RideMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */; };
 		1DBF9680D7DB454EBDB042E1 /* UnlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D6FFB153009A78C10A5037 /* UnlockView.swift */; };
+		2F6541157E3E6A1E3E60028E /* CurfewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 359B58DDDF56FA7D8A371421 /* CurfewView.swift */; };
 		4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */; };
 		4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */; };
 		5C4770095491B238CDD0D39F /* UnoWheelWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */; };
@@ -22,6 +23,7 @@
 		95C5609AF2BEF8D6879FB5C5 /* WeatherLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622187ECD39D6A4774F85DFC /* WeatherLookup.swift */; };
 		95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FAB40A1A7E79280B636C47 /* BoardView.swift */; };
 		9F1D975C104D557EE8FD77D0 /* RideLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */; };
+		A3EBFAE50EA81E032D8D2EE5 /* CurfewAlert.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25BA9B00FD759D09B3FEE520 /* CurfewAlert.swift */; };
 		ABBA1D2E6D2338A90F278298 /* UnlockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */; };
 		BE04CF21B48CE8EE3B9E77E4 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1A24D60E710982DA6A0D80 /* ScannerView.swift */; };
 		CF745167EE55F7604F1554F7 /* RidesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B104B5E09107FDD9FA58D5 /* RidesView.swift */; };
@@ -31,6 +33,7 @@
 		E27A174A241ACCB0E3E14100 /* Waiters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */; };
 		E9BA92E7A3D54F1137B366E0 /* Rides.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35665AD7D2A6745907345188 /* Rides.swift */; };
 		F7E371F4E82070BCAB0AE6EC /* UnoWheelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97828C944F6A976A2DF82772 /* UnoWheelApp.swift */; };
+		FAE85A99F45628B2BB2D16B6 /* CurfewWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86251D880FDD40D4FCC26DBC /* CurfewWatch.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,8 +67,10 @@
 		0CC6DDB2F37AF8150C8E2281 /* Waiters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Waiters.swift; sourceTree = "<group>"; };
 		1229BEBEF3B7EB06E7DF2143 /* UnoWheelWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelWidgets.swift; sourceTree = "<group>"; };
 		13A596EEF08C5A5A2BC58AF4 /* RideLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideLiveActivity.swift; sourceTree = "<group>"; };
+		25BA9B00FD759D09B3FEE520 /* CurfewAlert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurfewAlert.swift; sourceTree = "<group>"; };
 		26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatRaster.swift; sourceTree = "<group>"; };
 		35665AD7D2A6745907345188 /* Rides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rides.swift; sourceTree = "<group>"; };
+		359B58DDDF56FA7D8A371421 /* CurfewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurfewView.swift; sourceTree = "<group>"; };
 		3BAEDA9FA11ED782C8FDDBA1 /* UnoWheelWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = UnoWheelWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D1A24D60E710982DA6A0D80 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
 		3F6EA69C07696FDF0922E8C7 /* UnlockStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockStore.swift; sourceTree = "<group>"; };
@@ -75,6 +80,7 @@
 		5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMirror.swift; sourceTree = "<group>"; };
 		61504825A1F3396112873106 /* UnoWheel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = UnoWheel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		622187ECD39D6A4774F85DFC /* WeatherLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherLookup.swift; sourceTree = "<group>"; };
+		86251D880FDD40D4FCC26DBC /* CurfewWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurfewWatch.swift; sourceTree = "<group>"; };
 		97828C944F6A976A2DF82772 /* UnoWheelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnoWheelApp.swift; sourceTree = "<group>"; };
 		A1C9A433C252BB5503D037ED /* BatteryWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
 		A4B104B5E09107FDD9FA58D5 /* RidesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RidesView.swift; sourceTree = "<group>"; };
@@ -128,6 +134,9 @@
 				EA6911E3150AAE3F32A51B38 /* BoardConnection.swift */,
 				09FAB40A1A7E79280B636C47 /* BoardView.swift */,
 				42F2379A461866784708DD42 /* ChargeRecorder.swift */,
+				25BA9B00FD759D09B3FEE520 /* CurfewAlert.swift */,
+				359B58DDDF56FA7D8A371421 /* CurfewView.swift */,
+				86251D880FDD40D4FCC26DBC /* CurfewWatch.swift */,
 				075E8D8877C52D4050929CD1 /* HeatmapOverlay.swift */,
 				26A3D85D1BFF6BCA08B6DB8A /* HeatRaster.swift */,
 				5C9B5E4FF9BBCE1ABABAB685 /* RideMirror.swift */,
@@ -279,6 +288,9 @@
 				D8490BC86BF7C525C86BB3C7 /* BoardConnection.swift in Sources */,
 				95D8A8F78F7D8FA510E78BA3 /* BoardView.swift in Sources */,
 				5CE9C08648DE24811E07D573 /* ChargeRecorder.swift in Sources */,
+				A3EBFAE50EA81E032D8D2EE5 /* CurfewAlert.swift in Sources */,
+				2F6541157E3E6A1E3E60028E /* CurfewView.swift in Sources */,
+				FAE85A99F45628B2BB2D16B6 /* CurfewWatch.swift in Sources */,
 				4BF6177B219B2F811DB20AB0 /* HeatRaster.swift in Sources */,
 				4723C5D87E93651C60964AC9 /* HeatmapOverlay.swift in Sources */,
 				D6FDBA1B7CFD90CD63788064 /* LightsIntent.swift in Sources */,
